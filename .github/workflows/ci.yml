@@ -37,6 +37,7 @@ jobs:
         run: |
           scripts=(
             tests/static.sh
+            tests/xpra-password.sh
             tests/wireguard-server-static.sh
             tests/add-wireguard-peer-static.sh
             tests/integration/wireguard-killswitch.sh
@@ -54,6 +55,7 @@ jobs:
         run: |
           shellcheck \
             tests/static.sh \
+            tests/xpra-password.sh \
             tests/wireguard-server-static.sh \
             tests/add-wireguard-peer-static.sh \
             tests/integration/wireguard-killswitch.sh \
