@@ -12,6 +12,7 @@ required=(
   compose.yaml
   browser/Dockerfile
   browser/entrypoint.sh
+  browser/start-browser.sh
   .gitignore
   .env.account.example
   config/wireguard.example.conf
@@ -26,12 +27,13 @@ done
 grep -Eq "network_mode:[[:space:]]*[\"']?service:vpn" compose.yaml || fail 'browser must share vpn network namespace'
 ! grep -Eq "network_mode:[[:space:]]*[\"']?host" compose.yaml || fail 'host networking is forbidden'
 ! grep -Eq 'privileged:[[:space:]]*true' compose.yaml || fail 'privileged containers are forbidden'
-! grep -q 'no-new-privileges' compose.yaml || fail 'no-new-privileges breaks the Debian Chromium setuid sandbox'
+! grep -q 'SYS_ADMIN' compose.yaml || fail 'SYS_ADMIN is forbidden; Chromium must use its user-namespace sandbox'
+grep -q 'no-new-privileges:true' compose.yaml || fail 'browser must use no-new-privileges with the user-namespace sandbox'
 grep -q 'FIREWALL_INPUT_PORTS' compose.yaml || fail 'Gluetun Xpra input firewall allowance is required'
 grep -q '127.0.0.1' .env.account.example || fail 'Xpra sample bind must default to loopback'
 grep -q 'state/' .gitignore || fail 'runtime state must be ignored'
-! grep -R --line-number --fixed-strings -- '--no-sandbox' browser compose.yaml rbs || fail 'Chromium sandbox must stay enabled'
-grep -Eq '^[[:space:]]+chromium-sandbox[[:space:]]*\\?$' browser/Dockerfile || fail 'Debian Chromium sandbox package is required'
+! grep -R --line-number --fixed-strings -- '--no-sandbox' browser compose.yaml rbs || fail 'disabling the Chromium sandbox is forbidden'
+grep -q -- '--disable-setuid-sandbox' browser/start-browser.sh || fail 'Chromium must use the unprivileged user-namespace sandbox instead of the SUID helper'
 grep -Eq '^[[:space:]]+xpra-x11[[:space:]]*\\?$' browser/Dockerfile || fail 'xpra-x11 is required for Xpra seamless mode'
 
 grep -q "case \"\$command\" in" rbs || fail 'rbs command dispatcher missing'
