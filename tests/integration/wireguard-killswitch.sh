@@ -141,8 +141,9 @@ for _ in 1 2 3; do
   fi
 done
 
+vpn_id="$(docker inspect -f '{{.Id}}' "$vpn")"
 probe_mode="$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$probe")"
-[[ "$probe_mode" == "container:${vpn}" ]] || {
+[[ "$probe_mode" == "container:${vpn_id}" ]] || {
   printf 'Probe unexpectedly has an independent network mode: %s\n' "$probe_mode" >&2
   exit 1
 }
