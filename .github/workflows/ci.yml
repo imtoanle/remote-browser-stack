@@ -97,7 +97,7 @@ jobs:
           printf 'seccomp-profile=%s\n' "$seccomp_profile"
           jq -e '.syscalls[] | select(.action == "SCMP_ACT_ALLOW" and (.names | index("unshare")))' "$seccomp_profile" >/dev/null
 
-      - name: Smoke test Xpra and Chromium startup
+      - name: Smoke test Xpra and Google Chrome Stable startup
         run: |
           password_file="$(mktemp)"
           seccomp_profile="$(bash ./scripts/install-seccomp-profile.sh)"
@@ -110,10 +110,6 @@ jobs:
           }
           trap cleanup EXIT
 
-          # Match the production browser security posture: Chromium remains
-          # non-root with all capabilities dropped, NNP enabled, Docker's
-          # AppArmor layer disabled for userns compatibility, and a modern
-          # Moby-based seccomp profile with only namespace syscalls added.
           docker run -d \
             --name rbs-browser-smoke \
             --network none \
@@ -126,19 +122,19 @@ jobs:
             -v "$password_file:/run/secrets/xpra_password:ro" \
             remote-browser-stack:ci
 
-          for _ in {1..20}; do
+          for _ in {1..25}; do
             if [[ "$(docker inspect -f '{{.State.Running}}' rbs-browser-smoke)" != "true" ]]; then
               docker logs rbs-browser-smoke
               exit 1
             fi
 
             if docker exec rbs-browser-smoke bash -c '
-              for file in /proc/[0-9]*/comm; do
-                read -r name < "$file" || continue
-                [[ "$name" == chromium* ]] && exit 0
+              for file in /proc/[0-9]*/cmdline; do
+                tr "\0" " " < "$file" 2>/dev/null | grep -q "google-chrome" && exit 0
               done
               exit 1
             '; then
+              docker exec rbs-browser-smoke google-chrome-stable --version
               exit 0
             fi
 
@@ -146,5 +142,5 @@ jobs:
           done
 
           docker logs rbs-browser-smoke
-          echo 'Chromium did not start within the smoke-test window' >&2
+          echo 'Google Chrome Stable did not start within the smoke-test window' >&2
           exit 1
