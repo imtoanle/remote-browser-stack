@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-exec dbus-run-session -- chromium \
+exec dbus-run-session -- google-chrome-stable \
   --user-data-dir="$HOME/profile" \
   --disable-setuid-sandbox \
   --no-first-run \
