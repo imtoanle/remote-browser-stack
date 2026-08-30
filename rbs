@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STATE_DIR="${RBS_STATE_DIR:-$ROOT_DIR/state/accounts}"
 COMPOSE_FILE="$ROOT_DIR/compose.yaml"
+SECCOMP_PROFILE="${RBS_SECCOMP_PROFILE:-$ROOT_DIR/state/security/chromium-seccomp.json}"
 command="${1:-help}"
 
 fail() {
@@ -63,6 +64,11 @@ read_env_value() {
   printf '%s' "$value"
 }
 
+ensure_seccomp_profile() {
+  RBS_SECCOMP_PROFILE="$SECCOMP_PROFILE" "$ROOT_DIR/scripts/install-seccomp-profile.sh" >/dev/null
+  [[ -s "$SECCOMP_PROFILE" ]] || fail "Chromium seccomp profile was not installed: $SECCOMP_PROFILE"
+}
+
 compose() {
   local account="$1"
   shift
@@ -71,7 +77,7 @@ compose() {
   env_file="$(account_env "$account")"
   (
     cd "$ROOT_DIR"
-    ACCOUNT_DIR="$dir" docker compose \
+    ACCOUNT_DIR="$dir" SECCOMP_PROFILE="$SECCOMP_PROFILE" docker compose \
       --project-name "rbs-$account" \
       --env-file "$env_file" \
       -f "$COMPOSE_FILE" \
@@ -166,7 +172,7 @@ validate_wireguard() {
 
 doctor() {
   local failed=0
-  for cmd in docker openssl ss; do
+  for cmd in docker openssl ss curl; do
     if command -v "$cmd" >/dev/null 2>&1; then
       printf 'OK   %s\n' "$cmd"
     else
@@ -196,6 +202,12 @@ doctor() {
     failed=1
   fi
 
+  if [[ -s "$SECCOMP_PROFILE" ]]; then
+    printf 'OK   Chromium seccomp profile\n'
+  else
+    printf 'INFO Chromium seccomp profile will be installed automatically by ./rbs up\n'
+  fi
+
   return "$failed"
 }
 
@@ -211,6 +223,7 @@ case "$command" in
     require_account "$account"
     require_command docker
     validate_wireguard "$account"
+    ensure_seccomp_profile
     compose "$account" up -d --build
     ;;
   down)
