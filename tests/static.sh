@@ -31,7 +31,7 @@ grep -q '127.0.0.1' .env.account.example || fail 'Xpra sample bind must default 
 grep -q 'state/' .gitignore || fail 'runtime state must be ignored'
 ! grep -R --line-number --fixed-strings -- '--no-sandbox' browser compose.yaml rbs || fail 'Chromium sandbox must stay enabled'
 
-grep -q 'case "$command" in' rbs || fail 'rbs command dispatcher missing'
+grep -q "case \"\$command\" in" rbs || fail 'rbs command dispatcher missing'
 for command in create up down logs status ip connect doctor; do
   grep -Eq "(^|[|[:space:]])${command}([)|[:space:]])" rbs || fail "rbs command missing: $command"
 done
