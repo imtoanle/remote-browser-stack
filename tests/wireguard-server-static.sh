@@ -19,7 +19,7 @@ grep -q 'wg-quick@' "$script" || fail 'installer must enable wg-quick service'
 grep -q '# rbs-client:' "$script" || fail 'installer must mark generated peers'
 grep -q 'AllowedIPs = 0.0.0.0/0' "$script" || fail 'generated client must be full-tunnel'
 grep -q 'PersistentKeepalive = 25' "$script" || fail 'generated client must keep NAT mappings alive'
-grep -Fq 'KEY_DIR="$WG_DIR/rbs-keys"' "$script" || fail 'installer must persist generated peer material under /etc/wireguard/rbs-keys'
+grep -Fq "KEY_DIR=\"\$WG_DIR/rbs-keys\"" "$script" || fail 'installer must persist generated peer material under /etc/wireguard/rbs-keys'
 ! grep -q 'flush ruleset' "$script" || fail 'installer must not flush unrelated nftables rules'
 
 printf 'WireGuard server static contract: PASS\n'
