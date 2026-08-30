@@ -19,7 +19,7 @@ services:
       - name: xpra
         target: 14500
         published: "${XPRA_PORT}"
-        host_ip: "${XPRA_BIND_IP:-127.0.0.1}"
+        host_ip: "${XPRA_BIND_IP:-0.0.0.0}"
         protocol: tcp
     restart: unless-stopped
 
