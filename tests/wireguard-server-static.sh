@@ -23,8 +23,8 @@ grep -Fq "KEY_DIR=\"\$WG_DIR/rbs-keys\"" "$script" || fail 'installer must persi
 grep -q '^validate_ipv4_cidr()' "$script" || fail 'installer must validate IPv4 CIDRs structurally'
 grep -q 'prefix > 32' "$script" || fail 'installer must reject IPv4 prefixes above /32'
 grep -q 'octet > 255' "$script" || fail 'installer must reject IPv4 octets above 255'
-grep -Fq 'wg pubkey < "$SERVER_PRIVATE" > "$SERVER_PUBLIC"' "$script" || fail 'installer must regenerate a missing server public key from the private key'
-grep -Fq 'wg pubkey < "$CLIENT_PRIVATE" > "$CLIENT_PUBLIC"' "$script" || fail 'installer must regenerate a missing client public key from the private key'
+grep -Fq "wg pubkey < \"\$SERVER_PRIVATE\" > \"\$SERVER_PUBLIC\"" "$script" || fail 'installer must regenerate a missing server public key from the private key'
+grep -Fq "wg pubkey < \"\$CLIENT_PRIVATE\" > \"\$CLIENT_PUBLIC\"" "$script" || fail 'installer must regenerate a missing client public key from the private key'
 ! grep -q 'flush ruleset' "$script" || fail 'installer must not flush unrelated nftables rules'
 
 printf 'WireGuard server static contract: PASS\n'
