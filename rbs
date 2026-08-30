@@ -134,7 +134,7 @@ create_account() {
   openssl rand -hex 24 > "$dir/xpra-password"
   cat > "$env_file" <<EOF
 ACCOUNT_NAME=$account
-XPRA_BIND_IP=127.0.0.1
+XPRA_BIND_IP=0.0.0.0
 XPRA_PORT=$port
 START_URL=about:blank
 TZ=UTC
@@ -256,7 +256,7 @@ case "$command" in
     port="$(read_env_value "$account" XPRA_PORT)"
     if [[ "$bind_ip" == "127.0.0.1" ]]; then
       cat <<EOF
-Xpra is bound to loopback (safe default).
+Xpra is bound to loopback.
 
 On your client machine:
   ssh -N -L ${port}:127.0.0.1:${port} USER@BROWSER_VM
@@ -267,14 +267,27 @@ Then, in another terminal:
 Xpra will prompt for the password. Retrieve it on the VM with:
   ./rbs password $account
 EOF
+    elif [[ "$bind_ip" == "0.0.0.0" ]]; then
+      cat <<EOF
+Xpra is listening on all VM interfaces at port $port.
+From a trusted LAN, replace BROWSER_VM_LAN_IP with the Debian VM's LAN address:
+  xpra attach tcp://BROWSER_VM_LAN_IP:${port}/
+
+Xpra will prompt for the password. Retrieve it on the VM with:
+  ./rbs password $account
+
+Do not expose this TCP port to the public Internet/WAN.
+EOF
     else
       cat <<EOF
 Xpra is bound to $bind_ip:$port.
-Connect from a trusted management network with:
+Connect from a trusted LAN with:
   xpra attach tcp://$bind_ip:$port/
 
 Retrieve the password on the VM with:
   ./rbs password $account
+
+Do not expose this TCP port to the public Internet/WAN.
 EOF
     fi
     ;;
