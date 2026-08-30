@@ -27,11 +27,12 @@ password_file="$client_dir/account-test.password"
 [[ -f "$password_file" ]] || fail 'client-config must generate a separate password file'
 [[ "$(cat "$password_file")" == "$password" ]] || fail 'client password file must contain the account Xpra password exactly'
 [[ "$(stat -c '%a' "$password_file")" == '600' ]] || fail 'client password file must be mode 0600'
+[[ "$(stat -c '%a' "$session_file")" == '600' ]] || fail 'client session file must be mode 0600'
 
 grep -qx 'mode=tcp' "$session_file" || fail 'client session must use TCP mode'
 grep -qx 'host=BROWSER_VM_LAN_IP' "$session_file" || fail '0.0.0.0 accounts must use an explicit LAN-IP placeholder'
 grep -qx 'port=14500' "$session_file" || fail 'client session must use the account Xpra port'
-grep -qx 'password-file=account-test.password' "$session_file" || fail 'client session must reference the sibling password file'
+grep -qx 'password-file=~/.config/xpra/rbs/account-test.password' "$session_file" || fail 'client session must reference the portable per-user password path'
 grep -qx 'window-close=disconnect' "$session_file" || fail 'client session must disconnect rather than close remote Chrome'
 grep -qx 'autoconnect=true' "$session_file" || fail 'client session must autoconnect when opened'
 
