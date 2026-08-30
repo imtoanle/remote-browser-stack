@@ -15,7 +15,8 @@ cleanup() {
 trap cleanup EXIT
 
 RBS_STATE_DIR="$state_dir" bash ./rbs create account-test >/dev/null
-password_file="$state_dir/account-test/xpra-password"
+account_dir="$state_dir/account-test"
+password_file="$account_dir/xpra-password"
 
 [[ -f "$password_file" ]] || fail 'rbs create did not generate xpra-password'
 
@@ -27,5 +28,11 @@ if LC_ALL=C grep -q $'[\r\n]' "$password_file"; then
 fi
 
 [[ "$(cat "$password_file")" =~ ^[0-9a-f]{48}$ ]] || fail 'Xpra password must remain a 48-character lowercase hex token'
+
+account_mode="$(stat -c '%a' "$account_dir")"
+[[ "$account_mode" == '700' ]] || fail "account directory must remain host-private (0700); got $account_mode"
+
+password_mode="$(stat -c '%a' "$password_file")"
+[[ "$password_mode" == '644' ]] || fail "Xpra password must be readable by the non-root container through Compose's file bind mount; got $password_mode"
 
 printf 'Xpra password generation contract: PASS\n'
