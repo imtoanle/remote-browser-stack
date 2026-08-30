@@ -42,7 +42,8 @@ apt-get install -y --no-install-recommends \
   docker-compose-plugin \
   git \
   openssl \
-  iproute2
+  iproute2 \
+  jq
 
 systemctl enable --now docker
 
