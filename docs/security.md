@@ -47,7 +47,11 @@ The preferred remote transport is an SSH local-forward. If direct LAN binding is
 
 ## Browser sandbox
 
-Chromium runs as a non-root user. The container drops all capabilities and enables `no-new-privileges`. The project intentionally does not pass `--no-sandbox`.
+Chromium runs as a non-root user and the container drops all Linux capabilities. Debian's `chromium-sandbox` package is installed explicitly, and the project intentionally does not pass `--no-sandbox`.
+
+The browser service intentionally does **not** use Docker's `no-new-privileges` option. Debian Chromium's setuid sandbox helper must temporarily execute with its root-owned SUID privilege to create the browser sandbox namespaces and then drops privileges again. `no-new-privileges` disables that transition and Chromium aborts rather than running without a usable sandbox.
+
+This exception is limited to the browser's own sandbox bootstrap. The container remains non-root, unprivileged, with all Docker capabilities dropped. CI smoke-tests Chromium under that exact policy so changes that break sandbox startup are detected.
 
 Container isolation is still not a replacement for a VM boundary against kernel/container escapes. The design uses a dedicated Debian VM so a browser compromise is also separated from unrelated Proxmox workloads.
 
@@ -89,8 +93,10 @@ Repeat the failure test after meaningful changes to Docker, Gluetun, WireGuard c
 - adding host networking;
 - enabling privileged containers;
 - launching Chromium with `--no-sandbox`;
+- omitting Debian's `chromium-sandbox` package;
+- adding `no-new-privileges`, which prevents the Debian setuid sandbox helper from functioning;
 - changing the example Xpra bind away from loopback;
 - tracking runtime state;
 - committing a WireGuard-looking private key outside explicitly allowed documentation/example files.
 
-Static checks do not replace the runtime failure test.
+CI also starts Xpra and Chromium using the production browser capability policy. Static and startup checks do not replace the runtime VPN failure test on the target Debian VM.
