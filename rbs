@@ -133,6 +133,19 @@ prepare_xpra_password() {
   chmod 0644 "$file"
 }
 
+prepare_start_url() {
+  local account="$1"
+  local env_file
+  env_file="$(account_env "$account")"
+
+  # Older releases generated START_URL=about:blank. Together with Chrome's
+  # --restore-last-session this opens an extra blank tab on every restart.
+  # Treat that legacy generated default as unset; custom URLs remain untouched.
+  if grep -qx 'START_URL=about:blank' "$env_file"; then
+    sed -i 's/^START_URL=about:blank$/START_URL=/' "$env_file"
+  fi
+}
+
 create_account() {
   local account="$1"
   local dir env_file port
@@ -153,7 +166,7 @@ create_account() {
 ACCOUNT_NAME=$account
 XPRA_BIND_IP=0.0.0.0
 XPRA_PORT=$port
-START_URL=about:blank
+START_URL=
 TZ=UTC
 EOF
   chmod 0600 "$dir/wireguard.conf" "$env_file"
@@ -240,6 +253,7 @@ case "$command" in
     require_account "$account"
     require_command docker
     prepare_xpra_password "$account"
+    prepare_start_url "$account"
     validate_wireguard "$account"
     ensure_seccomp_profile
     compose "$account" up -d --build
@@ -280,7 +294,7 @@ On your client machine:
   ssh -N -L ${port}:127.0.0.1:${port} USER@BROWSER_VM
 
 Then, in another terminal:
-  xpra attach tcp://127.0.0.1:${port}/
+  xpra attach --window-close=disconnect tcp://127.0.0.1:${port}/
 
 Xpra will prompt for the password. Retrieve it on the VM with:
   ./rbs password $account
@@ -289,7 +303,7 @@ EOF
       cat <<EOF
 Xpra is listening on all VM interfaces at port $port.
 From a trusted LAN, replace BROWSER_VM_LAN_IP with the Debian VM's LAN address:
-  xpra attach tcp://BROWSER_VM_LAN_IP:${port}/
+  xpra attach --window-close=disconnect tcp://BROWSER_VM_LAN_IP:${port}/
 
 Xpra will prompt for the password. Retrieve it on the VM with:
   ./rbs password $account
@@ -300,7 +314,7 @@ EOF
       cat <<EOF
 Xpra is bound to $bind_ip:$port.
 Connect from a trusted LAN with:
-  xpra attach tcp://$bind_ip:$port/
+  xpra attach --window-close=disconnect tcp://$bind_ip:$port/
 
 Retrieve the password on the VM with:
   ./rbs password $account
