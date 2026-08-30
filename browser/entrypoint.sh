@@ -11,6 +11,9 @@ fi
 export XDG_RUNTIME_DIR="$HOME/.runtime"
 install -d -m 0700 "$HOME/profile" "$HOME/.xpra" "$XDG_RUNTIME_DIR"
 
+# Xpra expands $XAUTHORITY, $XDG_RUNTIME_DIR and $DISPLAY when it launches
+# the virtual X server, so these placeholders must remain literal here.
+# shellcheck disable=SC2016
 xvfb_command='/usr/lib/xorg/Xorg -noreset -novtswitch -nolisten tcp +extension GLX +extension RANDR +extension RENDER -auth $XAUTHORITY -logfile $XDG_RUNTIME_DIR/Xorg.$DISPLAY.log -config /etc/xpra/xorg.conf -dpi 96'
 
 exec xpra seamless :100 \
