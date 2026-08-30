@@ -22,6 +22,7 @@ required=(
   scripts/install-wireguard-server.sh
   scripts/add-wireguard-peer.sh
   tests/xpra-password.sh
+  tests/client-config.sh
   tests/chrome-profile-lock.sh
   tests/wireguard-server-static.sh
   tests/add-wireguard-peer-static.sh
@@ -86,7 +87,7 @@ for syscall in clone3 openat2 pidfd_open; do
 done
 
 grep -q "case \"\$command\" in" rbs || fail 'rbs command dispatcher missing'
-for command in create up down logs status ip connect doctor; do
+for command in create up down logs status ip connect client-config password doctor; do
   grep -Eq "(^|[|[:space:]])${command}([)|[:space:]])" rbs || fail "rbs command missing: $command"
 done
 grep -q 'PLACEHOLDER_PRIVATE_KEY' rbs || fail 'rbs must reject the example private key'
@@ -101,6 +102,7 @@ grep -Eq '^[[:space:]]+jq[[:space:]]*\\?$' scripts/bootstrap-debian.sh || fail '
 ! grep -Eqi 'gnome|kde|xfce|lightdm|gdm' scripts/bootstrap-debian.sh || fail 'bootstrap must remain headless'
 
 bash tests/xpra-password.sh >/dev/null || fail 'Xpra password generation contract failed'
+bash tests/client-config.sh >/dev/null || fail 'Xpra client config generation contract failed'
 bash tests/chrome-profile-lock.sh >/dev/null || fail 'Chrome profile stale-lock cleanup contract failed'
 bash tests/wireguard-server-static.sh >/dev/null || fail 'WireGuard server static contract failed'
 bash tests/add-wireguard-peer-static.sh >/dev/null || fail 'WireGuard peer lifecycle contract failed'
