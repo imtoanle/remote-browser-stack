@@ -79,6 +79,30 @@ jobs:
       - name: Build browser image
         run: docker build --pull -t remote-browser-stack:ci browser
 
+      - name: Diagnose sandbox host policy
+        run: |
+          set -euo pipefail
+          echo 'Docker security options:'
+          docker info --format '{{json .SecurityOptions}}'
+          for path in \
+            /proc/sys/kernel/unprivileged_userns_clone \
+            /proc/sys/user/max_user_namespaces \
+            /proc/sys/kernel/apparmor_restrict_unprivileged_userns; do
+            if [[ -r "$path" ]]; then
+              printf '%s=' "$path"
+              cat "$path"
+            fi
+          done
+          seccomp_profile="$(bash ./scripts/install-seccomp-profile.sh)"
+          docker run --rm \
+            --network none \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --security-opt "seccomp=$seccomp_profile" \
+            --entrypoint bash \
+            remote-browser-stack:ci \
+            -lc 'printf "container-apparmor="; cat /proc/self/attr/current 2>/dev/null || true; chromium --version'
+
       - name: Smoke test Xpra and Chromium startup
         run: |
           password_file="$(mktemp)"
