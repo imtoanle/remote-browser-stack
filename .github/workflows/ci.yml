@@ -118,16 +118,26 @@ jobs:
 
       - name: Smoke test Xpra authentication and Google Chrome Stable startup
         run: |
-          password_file="$(mktemp)"
+          secret_dir="$(mktemp -d)"
+          password_file="$secret_dir/xpra-password"
           seccomp_profile="$(bash ./scripts/install-seccomp-profile.sh)"
-          printf '%s' 'ci-only-password' > "$password_file"
-          chmod 0600 "$password_file"
 
           cleanup() {
             docker rm -f rbs-browser-smoke >/dev/null 2>&1 || true
-            rm -f "$password_file"
+            rm -rf "$secret_dir"
           }
           trap cleanup EXIT
+
+          # Reproduce the production path: accounts are normally created via
+          # sudo, so the host-side secret is root-owned and mode 0600.
+          docker run --rm \
+            --user 0 \
+            --entrypoint /bin/sh \
+            -v "$secret_dir:/out" \
+            remote-browser-stack:ci \
+            -c "printf '%s' 'ci-only-password' > /out/xpra-password && chmod 0600 /out/xpra-password"
+
+          test "$(stat -c '%u:%g:%a' "$password_file")" = '0:0:600'
 
           docker run -d \
             --name rbs-browser-smoke \
