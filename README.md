@@ -32,7 +32,7 @@ Only the VPN service receives `NET_ADMIN` and `/dev/net/tun`. The browser runs n
 
 Chrome is launched with `--disable-setuid-sandbox`, selecting its unprivileged user-namespace sandbox instead of the legacy SUID helper. The project forbids `--no-sandbox`, privileged browser containers, `SYS_ADMIN`, and `seccomp=unconfined` in production runtime paths.
 
-Xpra is published by the VPN namespace and binds to `127.0.0.1` on the VM by default. The recommended remote access path is an SSH tunnel.
+Xpra is published by the VPN namespace and, by default, Docker publishes each account's Xpra port on `0.0.0.0` so it can be reached directly from a **trusted LAN**. Xpra password authentication remains required. This plain TCP listener must not be forwarded or exposed to the public Internet/WAN. Operators who need encrypted remote transport can still set `XPRA_BIND_IP=127.0.0.1` and use an SSH tunnel.
 
 See [docs/security.md](docs/security.md) for the full threat model.
 
@@ -151,31 +151,35 @@ sudo ./rbs ip account-01
 
 The first start builds a Debian 13 image containing Google Chrome Stable and Xpra.
 
-## 5. Connect with Xpra
+## 5. Connect with Xpra from the LAN
+
+Run this helper **on the Debian browser VM**:
 
 ```bash
 sudo ./rbs connect account-01
 ```
 
-With the default loopback binding, create an SSH tunnel from your workstation:
+New accounts default to:
 
-```bash
-ssh -N -L 14500:127.0.0.1:14500 USER@BROWSER_VM
+```env
+XPRA_BIND_IP=0.0.0.0
 ```
 
-Then attach:
+From your workstation on the trusted LAN, connect to the Debian VM's LAN IP and the account-specific Xpra port:
 
 ```bash
-xpra attach tcp://127.0.0.1:14500/
+xpra attach tcp://192.168.1.50:14500/
 ```
 
-Retrieve the account password on the VM only when needed:
+Xpra prompts for the account password. Retrieve it on the VM only when needed:
 
 ```bash
 sudo ./rbs password account-01
 ```
 
-If you intentionally bind Xpra to a management-LAN address, use a trusted network. Do not expose the plain Xpra TCP listener directly to the public Internet.
+For multiple accounts the VM IP stays the same and only the port changes, for example `14500`, `14501`, `14502`.
+
+Do **not** port-forward these plain Xpra TCP ports from your router or expose them on a public/WAN interface. If you need access across an untrusted network, override the account to `XPRA_BIND_IP=127.0.0.1` and use SSH or another encrypted management tunnel.
 
 ## Multiple accounts
 
