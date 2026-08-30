@@ -29,11 +29,9 @@ jobs:
           set -euo pipefail
           command -v docker >/dev/null || { echo 'docker is required on the self-hosted runner' >&2; exit 1; }
           docker compose version >/dev/null || { echo 'docker compose plugin is required on the self-hosted runner' >&2; exit 1; }
-          command -v curl >/dev/null || { echo 'curl is required on the self-hosted runner' >&2; exit 1; }
-          if ! command -v shellcheck >/dev/null; then
-            echo 'shellcheck is required on the self-hosted runner' >&2
-            exit 1
-          fi
+          for command in curl jq shellcheck; do
+            command -v "$command" >/dev/null || { echo "$command is required on the self-hosted runner" >&2; exit 1; }
+          done
 
       - name: Shell syntax
         run: |
@@ -74,7 +72,9 @@ jobs:
         run: |
           set -euo pipefail
           command -v docker >/dev/null || { echo 'docker is required on the self-hosted runner' >&2; exit 1; }
-          command -v curl >/dev/null || { echo 'curl is required on the self-hosted runner' >&2; exit 1; }
+          for command in curl jq; do
+            command -v "$command" >/dev/null || { echo "$command is required on the self-hosted runner" >&2; exit 1; }
+          done
 
       - name: Build browser image
         run: docker build --pull -t remote-browser-stack:ci browser
@@ -94,18 +94,13 @@ jobs:
             fi
           done
           seccomp_profile="$(bash ./scripts/install-seccomp-profile.sh)"
-          docker run --rm \
-            --network none \
-            --cap-drop ALL \
-            --security-opt no-new-privileges:true \
-            --security-opt "seccomp=$seccomp_profile" \
-            --entrypoint bash \
-            remote-browser-stack:ci \
-            -lc 'printf "container-apparmor="; cat /proc/self/attr/current 2>/dev/null || true; chromium --version'
+          printf 'seccomp-profile=%s\n' "$seccomp_profile"
+          jq -e '.syscalls[] | select(.action == "SCMP_ACT_ALLOW" and (.names | index("unshare")))' "$seccomp_profile" >/dev/null
 
       - name: Smoke test Xpra and Chromium startup
         run: |
           password_file="$(mktemp)"
+          seccomp_profile="$(bash ./scripts/install-seccomp-profile.sh)"
           printf '%s' 'ci-only-password' > "$password_file"
           chmod 0600 "$password_file"
 
@@ -115,17 +110,17 @@ jobs:
           }
           trap cleanup EXIT
 
-          # Diagnostic experiment: remove only the outer seccomp filter while
-          # keeping the browser non-root, cap-drop ALL, NNP, AppArmor disabled,
-          # and network disabled. This tests whether the pinned 2021 profile is
-          # the next blocker after docker-default AppArmor.
+          # Match the production browser security posture: Chromium remains
+          # non-root with all capabilities dropped, NNP enabled, Docker's
+          # AppArmor layer disabled for userns compatibility, and a modern
+          # Moby-based seccomp profile with only namespace syscalls added.
           docker run -d \
             --name rbs-browser-smoke \
             --network none \
             --cap-drop ALL \
             --security-opt no-new-privileges:true \
             --security-opt apparmor=unconfined \
-            --security-opt seccomp=unconfined \
+            --security-opt "seccomp=$seccomp_profile" \
             --shm-size 1g \
             -e START_URL=about:blank \
             -v "$password_file:/run/secrets/xpra_password:ro" \
