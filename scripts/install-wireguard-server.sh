@@ -106,6 +106,7 @@ CLIENT_PRIVATE="$KEY_DIR/client-${CLIENT_NAME}.key"
 CLIENT_PUBLIC="$KEY_DIR/client-${CLIENT_NAME}.pub"
 CLIENT_ADDR_FILE="$KEY_DIR/client-${CLIENT_NAME}.address"
 WG_CONF="$WG_DIR/${WG_IF}.conf"
+SERVER_META="$WG_DIR/rbs-server.env"
 NFT_DIR="/etc/nftables.d"
 NFT_FILE="$NFT_DIR/rbs-wireguard.nft"
 SYSCTL_FILE="/etc/sysctl.d/99-rbs-wireguard.conf"
@@ -133,6 +134,14 @@ fi
 printf '%s\n' "$CLIENT_ADDRESS" > "$CLIENT_ADDR_FILE"
 chmod 0600 "$SERVER_PRIVATE" "$CLIENT_PRIVATE" "$CLIENT_ADDR_FILE"
 chmod 0644 "$SERVER_PUBLIC" "$CLIENT_PUBLIC"
+
+{
+  printf 'RBS_INTERFACE=%q\n' "$WG_IF"
+  printf 'RBS_LISTEN_PORT=%q\n' "$LISTEN_PORT"
+  printf 'RBS_SERVER_ADDRESS=%q\n' "$SERVER_ADDRESS"
+  printf 'RBS_ENDPOINT=%q\n' "$ENDPOINT"
+} > "$SERVER_META"
+chmod 0600 "$SERVER_META"
 
 server_private_key="$(cat "$SERVER_PRIVATE")"
 server_public_key="$(cat "$SERVER_PUBLIC")"
@@ -214,4 +223,5 @@ Client: $CLIENT_NAME ($CLIENT_ADDRESS)
 Client config: $OUTPUT
 
 Copy the client config securely to the remote-browser-stack account's wireguard.conf.
+Add later peers with scripts/add-wireguard-peer.sh on this server.
 EOF
