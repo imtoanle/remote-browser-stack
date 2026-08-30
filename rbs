@@ -131,7 +131,7 @@ create_account() {
   port="$(next_port)"
 
   cp "$ROOT_DIR/config/wireguard.example.conf" "$dir/wireguard.conf"
-  openssl rand -hex 24 > "$dir/xpra-password"
+  openssl rand -hex 24 | tr -d '\r\n' > "$dir/xpra-password"
   cat > "$env_file" <<EOF
 ACCOUNT_NAME=$account
 XPRA_BIND_IP=0.0.0.0
