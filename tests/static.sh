@@ -22,6 +22,7 @@ required=(
   scripts/install-wireguard-server.sh
   scripts/add-wireguard-peer.sh
   tests/xpra-password.sh
+  tests/client-config.sh
   tests/chrome-profile-lock.sh
   tests/wireguard-server-static.sh
   tests/add-wireguard-peer-static.sh
@@ -44,19 +45,32 @@ grep -Fq "seccomp=\${SECCOMP_PROFILE}" compose.yaml || fail 'browser must use th
 grep -q 'FIREWALL_INPUT_PORTS' compose.yaml || fail 'Gluetun Xpra input firewall allowance is required'
 grep -qx 'XPRA_BIND_IP=0.0.0.0' .env.account.example || fail 'Xpra sample bind must default to all VM interfaces for trusted-LAN access'
 grep -Fq 'XPRA_BIND_IP=0.0.0.0' rbs || fail 'new accounts must expose Xpra on VM interfaces for trusted-LAN access'
-grep -Fq 'xpra attach tcp://BROWSER_VM_LAN_IP:' rbs || fail 'rbs connect must show direct LAN attach guidance when bound to 0.0.0.0'
+grep -Fq 'tcp://BROWSER_VM_LAN_IP:' rbs || fail 'rbs connect must show direct LAN attach guidance when bound to 0.0.0.0'
+grep -Fq -- '--window-close=disconnect' rbs || fail 'rbs connect must keep remote Chrome alive when a forwarded window is closed'
 grep -q 'trusted LAN' README.md || fail 'README must document trusted-LAN Xpra access'
 ! grep -q 'default loopback binding' README.md || fail 'README must not describe loopback as the default Xpra binding'
 grep -q 'state/' .gitignore || fail 'runtime state must be ignored'
 ! grep -R --line-number --fixed-strings -- '--no-sandbox' browser compose.yaml rbs || fail 'disabling the Chrome sandbox is forbidden'
 ! grep -q -- '--disable-setuid-sandbox' browser/start-browser.sh || fail 'Chrome launcher must not use the unsupported --disable-setuid-sandbox flag'
-grep -q -- '--dpi=96' browser/entrypoint.sh || fail 'Xpra must start at a deterministic 96 DPI'
+grep -q -- '--dpi=96' browser/entrypoint.sh || fail 'Xpra must request a deterministic 96 DPI'
+grep -q -- '--xvfb=' browser/entrypoint.sh || fail 'Xpra must use an explicit Xdummy/Xorg virtual display command'
+grep -q 'Xorg' browser/entrypoint.sh || fail 'Xpra virtual display must use Xorg with the dummy driver'
+grep -q '/etc/xpra/xorg.conf' browser/entrypoint.sh || fail 'Xdummy must use the Xpra xorg.conf configuration'
 ! grep -q -- '--file-transfer=no' browser/entrypoint.sh || fail 'Xpra 6.5.3 client crashes when the file capability is omitted by --file-transfer=no'
 grep -Eq '^[[:space:]]+google-chrome-stable[[:space:]]*\\?$' browser/Dockerfile || fail 'browser image must install Google Chrome Stable'
 ! grep -Eq '^[[:space:]]+chromium[[:space:]]*\\?$' browser/Dockerfile || fail 'Debian Chromium package must not be the default browser'
 grep -q 'google-chrome-stable' browser/start-browser.sh || fail 'browser launcher must execute Google Chrome Stable'
+grep -q -- '--restore-last-session' browser/start-browser.sh || fail 'Chrome must restore the previous tab session after a browser/container restart'
+! grep -Fq 'about:blank' browser/start-browser.sh || fail 'Chrome launcher must not force a blank startup tab when START_URL is unset'
+grep -Fq "START_URL: \"\${START_URL:-}\"" compose.yaml || fail 'Compose must leave START_URL empty by default so session restore does not add a blank tab'
+grep -qx 'START_URL=' .env.account.example || fail 'sample account must leave START_URL empty by default'
+grep -qx 'START_URL=' rbs || fail 'new accounts must leave START_URL empty so session restore does not add a blank tab'
+grep -q 'prepare_start_url' rbs || fail 'rbs up must migrate the legacy generated START_URL=about:blank default'
 grep -q 'dl.google.com/linux/chrome/deb' browser/Dockerfile || fail 'Chrome must come from the official Google Debian repository'
 grep -Eq '^[[:space:]]+xpra-x11[[:space:]]*\\?$' browser/Dockerfile || fail 'xpra-x11 is required for Xpra seamless mode'
+grep -Eq '^[[:space:]]+xserver-xorg-video-dummy[[:space:]]*\\?$' browser/Dockerfile || fail 'Xdummy driver is required for correct dynamic hardware DPI'
+grep -Eq '^[[:space:]]+x11-utils[[:space:]]*\\?$' browser/Dockerfile || fail 'x11-utils is required for runtime DPI verification'
+grep -Eq '^[[:space:]]+python3-netifaces[[:space:]]*\\?$' browser/Dockerfile || fail 'python3-netifaces is required for Xpra network interface discovery'
 
 grep -q 'amd64-only' README.md || fail 'README must document the current amd64-only Chrome image'
 grep -q 'Google Chrome Stable' README.md || fail 'README must describe Google Chrome Stable as the default browser'
@@ -73,7 +87,7 @@ for syscall in clone3 openat2 pidfd_open; do
 done
 
 grep -q "case \"\$command\" in" rbs || fail 'rbs command dispatcher missing'
-for command in create up down logs status ip connect doctor; do
+for command in create up down logs status ip connect client-config password doctor; do
   grep -Eq "(^|[|[:space:]])${command}([)|[:space:]])" rbs || fail "rbs command missing: $command"
 done
 grep -q 'PLACEHOLDER_PRIVATE_KEY' rbs || fail 'rbs must reject the example private key'
@@ -88,6 +102,7 @@ grep -Eq '^[[:space:]]+jq[[:space:]]*\\?$' scripts/bootstrap-debian.sh || fail '
 ! grep -Eqi 'gnome|kde|xfce|lightdm|gdm' scripts/bootstrap-debian.sh || fail 'bootstrap must remain headless'
 
 bash tests/xpra-password.sh >/dev/null || fail 'Xpra password generation contract failed'
+bash tests/client-config.sh >/dev/null || fail 'Xpra client config generation contract failed'
 bash tests/chrome-profile-lock.sh >/dev/null || fail 'Chrome profile stale-lock cleanup contract failed'
 bash tests/wireguard-server-static.sh >/dev/null || fail 'WireGuard server static contract failed'
 bash tests/add-wireguard-peer-static.sh >/dev/null || fail 'WireGuard peer lifecycle contract failed'

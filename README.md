@@ -28,9 +28,9 @@ CI verifies this with a real ephemeral WireGuard server, a Gluetun client, and a
 
 ## Security model
 
-Only the VPN service receives `NET_ADMIN` and `/dev/net/tun`. The browser runs non-root, drops all Linux capabilities, enables `no-new-privileges`, retains Chrome's Linux sandbox, and publishes no ports directly.
+Only the VPN service receives `NET_ADMIN` and `/dev/net/tun`. The browser runs non-root, drops all Linux capabilities, enables `no-new-privileges`, retains Chrome's Linux user-namespace and seccomp sandboxing, and publishes no ports directly.
 
-Chrome is launched with `--disable-setuid-sandbox`, selecting its unprivileged user-namespace sandbox instead of the legacy SUID helper. The project forbids `--no-sandbox`, privileged browser containers, `SYS_ADMIN`, and `seccomp=unconfined` in production runtime paths.
+Chrome is launched without `--no-sandbox` or `--disable-setuid-sandbox`. The project forbids privileged browser containers, `SYS_ADMIN`, and `seccomp=unconfined` in production runtime paths.
 
 Xpra is published by the VPN namespace and, by default, Docker publishes each account's Xpra port on `0.0.0.0` so it can be reached directly from a **trusted LAN**. Xpra password authentication remains required. This plain TCP listener must not be forwarded or exposed to the public Internet/WAN. Operators who need encrypted remote transport can still set `XPRA_BIND_IP=127.0.0.1` and use an SSH tunnel.
 
@@ -149,7 +149,9 @@ sudo ./rbs status account-01
 sudo ./rbs ip account-01
 ```
 
-The first start builds a Debian 13 image containing Google Chrome Stable and Xpra.
+The first start builds a Debian 13 image containing Google Chrome Stable and Xpra. Xpra uses the Xorg dummy driver rather than Xvfb so the virtual display can maintain correct hardware DPI during client resize; CI verifies the Xdummy/Xpra configuration and browser startup path.
+
+The Chrome profile is persistent. Normal Xpra detach/reconnect leaves Chrome and its open tabs running. If Chrome or the container itself restarts, Chrome uses `--restore-last-session` to restore tabs from the persisted profile. New accounts leave `START_URL` empty by default so restoring a session does not add a blank tab; `./rbs up` also migrates the older generated `START_URL=about:blank` default to empty.
 
 ## 5. Connect with Xpra from the LAN
 
@@ -163,19 +165,30 @@ New accounts default to:
 
 ```env
 XPRA_BIND_IP=0.0.0.0
+START_URL=
 ```
 
 From your workstation on the trusted LAN, connect to the Debian VM's LAN IP and the account-specific Xpra port:
 
 ```bash
-xpra attach tcp://192.168.1.50:14500/
+xpra attach --window-close=disconnect tcp://192.168.1.50:14500/
 ```
+
+`--window-close=disconnect` is intentional: closing the forwarded Chrome window disconnects the Xpra client instead of forwarding a close request to the remote Chrome process. This keeps the browser and its tabs alive for the next attach. A normal client disconnect or client application quit should likewise leave the remote application running; use `sudo ./rbs down account-01` when you actually want to stop the remote stack.
 
 Xpra prompts for the account password. Retrieve it on the VM only when needed:
 
 ```bash
 sudo ./rbs password account-01
 ```
+
+For repeat connections, generate a reusable Xpra session file and separate password file:
+
+```bash
+sudo ./rbs client-config account-01
+```
+
+The generated files are written under `state/accounts/account-01/client/`. Copy both to `~/.config/xpra/rbs/` on the client machine. For the default `XPRA_BIND_IP=0.0.0.0`, edit the generated `.xpra` file once and replace `BROWSER_VM_LAN_IP` with the VM's LAN address. The session file enables `autoconnect=true` and `window-close=disconnect`, and loads the password from the separate mode-0600 password file.
 
 For multiple accounts the VM IP stays the same and only the port changes, for example `14500`, `14501`, `14502`.
 
@@ -218,6 +231,7 @@ For a production deployment, also verify the expected exit IP and DNS/WebRTC beh
 sudo ./rbs status account-01
 sudo ./rbs ip account-01
 sudo ./rbs logs account-01
+sudo ./rbs client-config account-01
 sudo ./rbs down account-01
 sudo ./rbs up account-01
 ```
@@ -239,6 +253,7 @@ sudo ./rbs up account-01
 ├── tests/
 │   ├── integration/
 │   ├── add-wireguard-peer-static.sh
+│   ├── client-config.sh
 │   ├── static.sh
 │   └── wireguard-server-static.sh
 ├── compose.yaml
@@ -256,9 +271,3 @@ It also does not protect against a malicious Docker administrator or a compromis
 - [Google Chrome](https://www.google.com/chrome/) — default browser
 - [Xpra](https://github.com/Xpra-org/xpra) — persistent remote applications / seamless remote GUI
 - [Gluetun](https://github.com/qdm12/gluetun) — VPN container and fail-closed firewall
-- [WireGuard](https://www.wireguard.com/) — encrypted tunnel
-- [Docker Compose](https://docs.docker.com/compose/) — per-account orchestration
-
-## License
-
-MIT. See [LICENSE](LICENSE).

@@ -22,9 +22,12 @@ RUN apt-get update \
       google-chrome-stable \
       fonts-liberation \
       fonts-noto-color-emoji \
+      python3-netifaces \
+      x11-utils \
       xauth \
       xpra \
       xpra-x11 \
+      xserver-xorg-video-dummy \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --create-home --uid 1000 --shell /bin/bash browser \

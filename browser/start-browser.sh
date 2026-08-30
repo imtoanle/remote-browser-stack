@@ -12,8 +12,15 @@ rm -f \
   "$profile_dir/SingletonCookie" \
   "$profile_dir/SingletonSocket"
 
-exec dbus-run-session -- google-chrome-stable \
-  --user-data-dir="$profile_dir" \
-  --no-first-run \
-  --no-default-browser-check \
-  "${START_URL:-about:blank}"
+chrome_args=(
+  --user-data-dir="$profile_dir"
+  --no-first-run
+  --no-default-browser-check
+  --restore-last-session
+)
+
+if [[ -n "${START_URL:-}" ]]; then
+  chrome_args+=("$START_URL")
+fi
+
+exec dbus-run-session -- google-chrome-stable "${chrome_args[@]}"

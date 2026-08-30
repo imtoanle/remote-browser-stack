@@ -31,7 +31,7 @@ services:
       vpn:
         condition: service_healthy
     environment:
-      START_URL: "${START_URL:-about:blank}"
+      START_URL: "${START_URL:-}"
     volumes:
       - browser-profile:/home/browser/profile
     secrets:

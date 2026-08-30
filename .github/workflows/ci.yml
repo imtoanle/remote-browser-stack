@@ -131,9 +131,6 @@ jobs:
           }
           trap cleanup EXIT
 
-          # Match the local-Compose production contract: the account directory
-          # is private, while the file-backed secret itself is readable by the
-          # non-root browser UID after being bind-mounted into the container.
           chmod 0700 "$secret_dir"
           printf '%s' 'ci-only-password' > "$password_file"
           chmod 0644 "$password_file"
@@ -167,6 +164,8 @@ jobs:
             '; then
               docker exec rbs-browser-smoke google-chrome-stable --version
               docker exec rbs-browser-smoke xpra --version
+              docker exec rbs-browser-smoke python3 -c 'import netifaces'
+
               docker exec rbs-browser-smoke xpra info tcp://127.0.0.1:14500/ \
                 --challenge-handlers=file:filename=/run/secrets/xpra_password \
                 --debug=auth >/dev/null

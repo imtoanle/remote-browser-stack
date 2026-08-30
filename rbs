@@ -24,6 +24,7 @@ Usage:
   ./rbs status <account>
   ./rbs ip <account>
   ./rbs connect <account>
+  ./rbs client-config <account>
   ./rbs password <account>
   ./rbs doctor
 
@@ -133,6 +134,88 @@ prepare_xpra_password() {
   chmod 0644 "$file"
 }
 
+prepare_start_url() {
+  local account="$1"
+  local env_file
+  env_file="$(account_env "$account")"
+
+  # Older releases generated START_URL=about:blank. Together with Chrome's
+  # --restore-last-session this opens an extra blank tab on every restart.
+  # Treat that legacy generated default as unset; custom URLs remain untouched.
+  if grep -qx 'START_URL=about:blank' "$env_file"; then
+    sed -i 's/^START_URL=about:blank$/START_URL=/' "$env_file"
+  fi
+}
+
+generate_client_config() {
+  local account="$1"
+  local dir client_dir session_file password_file bind_ip port host
+
+  dir="$(account_dir "$account")"
+  client_dir="$dir/client"
+  session_file="$client_dir/$account.xpra"
+  password_file="$client_dir/$account.password"
+  bind_ip="$(read_env_value "$account" XPRA_BIND_IP)"
+  port="$(read_env_value "$account" XPRA_PORT)"
+
+  case "$bind_ip" in
+    0.0.0.0)
+      host='BROWSER_VM_LAN_IP'
+      ;;
+    127.0.0.1)
+      host='127.0.0.1'
+      ;;
+    *)
+      host="$bind_ip"
+      ;;
+  esac
+
+  umask 077
+  mkdir -p "$client_dir"
+  chmod 0700 "$client_dir"
+  cp "$dir/xpra-password" "$password_file"
+  chmod 0600 "$password_file"
+
+  cat > "$session_file" <<EOF
+mode=tcp
+host=$host
+port=$port
+password-file=~/.config/xpra/rbs/$account.password
+window-close=disconnect
+autoconnect=true
+EOF
+  chmod 0600 "$session_file"
+
+  cat <<EOF
+Generated Xpra client files:
+  $session_file
+  $password_file
+
+On the client machine:
+  mkdir -p ~/.config/xpra/rbs
+  chmod 700 ~/.config/xpra/rbs
+
+Copy both generated files into ~/.config/xpra/rbs/.
+EOF
+
+  if [[ "$host" == 'BROWSER_VM_LAN_IP' ]]; then
+    cat <<EOF
+Then edit $account.xpra and replace BROWSER_VM_LAN_IP with the Debian VM LAN address.
+EOF
+  elif [[ "$bind_ip" == '127.0.0.1' ]]; then
+    cat <<EOF
+Because this account is bound to loopback, establish the SSH tunnel before opening the session file:
+  ssh -N -L ${port}:127.0.0.1:${port} USER@BROWSER_VM
+EOF
+  fi
+
+  cat <<EOF
+
+Open the session with:
+  xpra launcher ~/.config/xpra/rbs/$account.xpra
+EOF
+}
+
 create_account() {
   local account="$1"
   local dir env_file port
@@ -153,7 +236,7 @@ create_account() {
 ACCOUNT_NAME=$account
 XPRA_BIND_IP=0.0.0.0
 XPRA_PORT=$port
-START_URL=about:blank
+START_URL=
 TZ=UTC
 EOF
   chmod 0600 "$dir/wireguard.conf" "$env_file"
@@ -240,6 +323,7 @@ case "$command" in
     require_account "$account"
     require_command docker
     prepare_xpra_password "$account"
+    prepare_start_url "$account"
     validate_wireguard "$account"
     ensure_seccomp_profile
     compose "$account" up -d --build
@@ -280,7 +364,7 @@ On your client machine:
   ssh -N -L ${port}:127.0.0.1:${port} USER@BROWSER_VM
 
 Then, in another terminal:
-  xpra attach tcp://127.0.0.1:${port}/
+  xpra attach --window-close=disconnect tcp://127.0.0.1:${port}/
 
 Xpra will prompt for the password. Retrieve it on the VM with:
   ./rbs password $account
@@ -289,7 +373,7 @@ EOF
       cat <<EOF
 Xpra is listening on all VM interfaces at port $port.
 From a trusted LAN, replace BROWSER_VM_LAN_IP with the Debian VM's LAN address:
-  xpra attach tcp://BROWSER_VM_LAN_IP:${port}/
+  xpra attach --window-close=disconnect tcp://BROWSER_VM_LAN_IP:${port}/
 
 Xpra will prompt for the password. Retrieve it on the VM with:
   ./rbs password $account
@@ -300,7 +384,7 @@ EOF
       cat <<EOF
 Xpra is bound to $bind_ip:$port.
 Connect from a trusted LAN with:
-  xpra attach tcp://$bind_ip:$port/
+  xpra attach --window-close=disconnect tcp://$bind_ip:$port/
 
 Retrieve the password on the VM with:
   ./rbs password $account
@@ -308,6 +392,11 @@ Retrieve the password on the VM with:
 Do not expose this TCP port to the public Internet/WAN.
 EOF
     fi
+    ;;
+  client-config)
+    [[ -n "$account" ]] || fail 'account name required'
+    require_account "$account"
+    generate_client_config "$account"
     ;;
   password)
     [[ -n "$account" ]] || fail 'account name required'
