@@ -166,26 +166,10 @@ jobs:
               docker exec rbs-browser-smoke xpra --version
               docker exec rbs-browser-smoke python3 -c 'import netifaces'
 
+              docker exec rbs-browser-smoke test -s /home/browser/.Xauthority
               resolution="$(docker exec rbs-browser-smoke bash -c '
-                set -e
-                chrome_pid=""
-                for cmdline in /proc/[0-9]*/cmdline; do
-                  command="$(tr "\0" " " < "$cmdline" 2>/dev/null || true)"
-                  if [[ "$command" == *"/opt/google/chrome/chrome"* && "$command" == *"--user-data-dir=/home/browser/profile"* ]]; then
-                    chrome_pid="${cmdline#/proc/}"
-                    chrome_pid="${chrome_pid%/cmdline}"
-                    break
-                  fi
-                done
-                test -n "$chrome_pid"
-                test -r "/proc/$chrome_pid/environ"
-                display="$(tr "\0" "\n" < "/proc/$chrome_pid/environ" | sed -n "s/^DISPLAY=//p")"
-                xauthority="$(tr "\0" "\n" < "/proc/$chrome_pid/environ" | sed -n "s/^XAUTHORITY=//p")"
-                test "$display" = ":100"
-                test -n "$xauthority"
-                test -r "$xauthority"
-                printf "chrome-pid=%s display=%s xauthority=%s\n" "$chrome_pid" "$display" "$xauthority" >&2
-                XAUTHORITY="$xauthority" xdpyinfo -display "$display" | awk "/resolution:/{print \$2; exit}"
+                XAUTHORITY=/home/browser/.Xauthority xdpyinfo -display :100 \
+                  | awk "/resolution:/{print \$2; exit}"
               ')"
               printf 'virtual-display-resolution=%s\n' "$resolution"
               test "$resolution" = '96x96'
