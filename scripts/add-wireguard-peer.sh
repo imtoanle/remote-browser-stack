@@ -94,14 +94,15 @@ done
 
 install -d -m 0700 "$KEY_DIR"
 
+shopt -s nullglob
 for addr_file in "$KEY_DIR"/client-*.address; do
-  [[ -e "$addr_file" ]] || break
   [[ "$addr_file" == "$CLIENT_ADDR_FILE" ]] && continue
   if [[ "$(cat "$addr_file")" == "$CLIENT_ADDRESS" ]]; then
     printf 'Client address %s is already assigned in %s\n' "$CLIENT_ADDRESS" "$addr_file" >&2
     exit 2
   fi
 done
+shopt -u nullglob
 
 if [[ ! -s "$SERVER_PUBLIC" || "$SERVER_PRIVATE" -nt "$SERVER_PUBLIC" ]]; then
   wg pubkey < "$SERVER_PRIVATE" > "$SERVER_PUBLIC"
