@@ -30,7 +30,7 @@ grep -Eq "network_mode:[[:space:]]*[\"']?service:vpn" compose.yaml || fail 'brow
 ! grep -Eq 'privileged:[[:space:]]*true' compose.yaml || fail 'privileged containers are forbidden'
 ! grep -q 'SYS_ADMIN' compose.yaml || fail 'SYS_ADMIN is forbidden; Chromium must use its user-namespace sandbox'
 grep -q 'no-new-privileges:true' compose.yaml || fail 'browser must use no-new-privileges with the user-namespace sandbox'
-grep -Fq 'seccomp=${SECCOMP_PROFILE}' compose.yaml || fail 'browser must use the pinned Chromium seccomp profile'
+grep -Fq "seccomp=\${SECCOMP_PROFILE}" compose.yaml || fail 'browser must use the pinned Chromium seccomp profile'
 ! grep -R --line-number -E 'seccomp[=:][[:space:]]*unconfined' compose.yaml .github scripts rbs || fail 'unconfined seccomp is forbidden'
 grep -q 'FIREWALL_INPUT_PORTS' compose.yaml || fail 'Gluetun Xpra input firewall allowance is required'
 grep -q '127.0.0.1' .env.account.example || fail 'Xpra sample bind must default to loopback'
@@ -51,11 +51,18 @@ for command in create up down logs status ip connect doctor; do
 done
 grep -q 'PLACEHOLDER_PRIVATE_KEY' rbs || fail 'rbs must reject the example private key'
 grep -q 'ensure_seccomp_profile' rbs || fail 'rbs up must provision the Chromium seccomp profile'
+grep -Fq 'bash "$ROOT_DIR/scripts/install-seccomp-profile.sh"' rbs \
+  || fail 'rbs must invoke the seccomp installer through bash so checkout mode bits cannot break startup'
 
 grep -q 'VERSION_CODENAME' scripts/bootstrap-debian.sh || fail 'bootstrap must validate Debian codename'
 grep -q 'download.docker.com/linux/debian' scripts/bootstrap-debian.sh || fail 'bootstrap must use Docker Debian repository'
 grep -q 'docker-compose-plugin' scripts/bootstrap-debian.sh || fail 'bootstrap must install Compose plugin'
 ! grep -Eqi 'gnome|kde|xfce|lightdm|gdm' scripts/bootstrap-debian.sh || fail 'bootstrap must remain headless'
+
+grep -q '^concurrency:' .github/workflows/ci.yml || fail 'CI must define workflow-level concurrency'
+grep -q 'cancel-in-progress:[[:space:]]*true' .github/workflows/ci.yml || fail 'CI must cancel obsolete runs when a new commit arrives'
+grep -Fq 'bash ./scripts/install-seccomp-profile.sh' .github/workflows/ci.yml \
+  || fail 'CI must invoke the seccomp installer through bash'
 
 # Guard against accidentally committing common real WireGuard secret assignments.
 while IFS= read -r file; do
