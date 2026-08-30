@@ -25,6 +25,8 @@ grep -q 'prefix > 32' "$script" || fail 'installer must reject IPv4 prefixes abo
 grep -q 'octet > 255' "$script" || fail 'installer must reject IPv4 octets above 255'
 grep -Fq "wg pubkey < \"\$SERVER_PRIVATE\" > \"\$SERVER_PUBLIC\"" "$script" || fail 'installer must regenerate a missing server public key from the private key'
 grep -Fq "wg pubkey < \"\$CLIENT_PRIVATE\" > \"\$CLIENT_PUBLIC\"" "$script" || fail 'installer must regenerate a missing client public key from the private key'
+grep -q 'rbs-server.env' "$script" || fail 'installer must persist endpoint/interface metadata for later peer creation'
+grep -q 'RBS_ENDPOINT=' "$script" || fail 'persisted server metadata must include the public endpoint'
 ! grep -q 'flush ruleset' "$script" || fail 'installer must not flush unrelated nftables rules'
 
 printf 'WireGuard server static contract: PASS\n'
