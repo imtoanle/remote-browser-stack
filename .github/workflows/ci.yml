@@ -67,6 +67,7 @@ jobs:
             --name rbs-browser-smoke \
             --network none \
             --cap-drop ALL \
+            --security-opt no-new-privileges:true \
             --shm-size 1g \
             -e START_URL=about:blank \
             -v "$password_file:/run/secrets/xpra_password:ro" \
