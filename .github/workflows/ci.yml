@@ -106,7 +106,6 @@ jobs:
       - name: Smoke test Xpra and Chromium startup
         run: |
           password_file="$(mktemp)"
-          seccomp_profile="$(bash ./scripts/install-seccomp-profile.sh)"
           printf '%s' 'ci-only-password' > "$password_file"
           chmod 0600 "$password_file"
 
@@ -116,13 +115,17 @@ jobs:
           }
           trap cleanup EXIT
 
+          # Diagnostic experiment: remove only the outer seccomp filter while
+          # keeping the browser non-root, cap-drop ALL, NNP, AppArmor disabled,
+          # and network disabled. This tests whether the pinned 2021 profile is
+          # the next blocker after docker-default AppArmor.
           docker run -d \
             --name rbs-browser-smoke \
             --network none \
             --cap-drop ALL \
             --security-opt no-new-privileges:true \
             --security-opt apparmor=unconfined \
-            --security-opt "seccomp=$seccomp_profile" \
+            --security-opt seccomp=unconfined \
             --shm-size 1g \
             -e START_URL=about:blank \
             -v "$password_file:/run/secrets/xpra_password:ro" \
