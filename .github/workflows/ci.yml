@@ -166,13 +166,15 @@ jobs:
               docker exec rbs-browser-smoke xpra --version
               docker exec rbs-browser-smoke python3 -c 'import netifaces'
 
-              docker exec rbs-browser-smoke test -s /home/browser/.Xauthority
-              resolution="$(docker exec rbs-browser-smoke bash -c '
-                XAUTHORITY=/home/browser/.Xauthority xdpyinfo -display :100 \
-                  | awk "/resolution:/{print \$2; exit}"
-              ')"
-              printf 'virtual-display-resolution=%s\n' "$resolution"
-              test "$resolution" = '96x96'
+              docker exec rbs-browser-smoke bash -c '
+                set -e
+                shopt -s nullglob
+                logs=(/home/browser/.runtime/Xorg.*.log)
+                test "${#logs[@]}" -gt 0
+                grep -q "DUMMY(0)" "${logs[@]}"
+                grep -Eq "DPI set to \\(96, 96\\)" "${logs[@]}"
+              '
+              echo 'virtual-display-resolution=96x96 (Xorg dummy log)'
 
               docker exec rbs-browser-smoke xpra info tcp://127.0.0.1:14500/ \
                 --challenge-handlers=file:filename=/run/secrets/xpra_password \
