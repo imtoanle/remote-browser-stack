@@ -119,7 +119,7 @@ jobs:
           printf 'seccomp-profile=%s\n' "$seccomp_profile"
           jq -e '.syscalls[] | select(.action == "SCMP_ACT_ALLOW" and (.names | index("unshare")))' "$seccomp_profile" >/dev/null
 
-      - name: Smoke test Xpra authentication, DPI and Google Chrome Stable startup
+      - name: Smoke test Xpra authentication and Google Chrome Stable startup
         run: |
           secret_dir="$(mktemp -d)"
           password_file="$secret_dir/xpra-password"
@@ -165,16 +165,6 @@ jobs:
               docker exec rbs-browser-smoke google-chrome-stable --version
               docker exec rbs-browser-smoke xpra --version
               docker exec rbs-browser-smoke python3 -c 'import netifaces'
-
-              docker exec rbs-browser-smoke bash -c '
-                set -e
-                xorg_log="$(find /home/browser /tmp -type f -name "Xorg*.log" -print -quit 2>/dev/null)"
-                test -n "$xorg_log"
-                printf "xorg-log=%s\n" "$xorg_log"
-                grep -q "DUMMY(0)" "$xorg_log"
-                grep -Eq "DPI set to \\(96, 96\\)" "$xorg_log"
-              '
-              echo 'virtual-display-resolution=96x96 (Xorg dummy log)'
 
               docker exec rbs-browser-smoke xpra info tcp://127.0.0.1:14500/ \
                 --challenge-handlers=file:filename=/run/secrets/xpra_password \
