@@ -33,9 +33,9 @@ browser:
   network_mode: "service:vpn"
 ```
 
-Only the `vpn` service receives `NET_ADMIN` and `/dev/net/tun`. The browser service runs as a non-root user, drops all Linux capabilities, keeps Debian's Chromium sandbox enabled, and publishes no ports.
+Only the `vpn` service receives `NET_ADMIN` and `/dev/net/tun`. The browser service runs as a non-root user, drops all Linux capabilities, enables `no-new-privileges`, keeps Chromium sandboxing enabled, and publishes no ports.
 
-The browser container intentionally does **not** set Docker's `no-new-privileges` security option. Debian Chromium uses a root-owned setuid sandbox helper to establish its Linux sandbox and then drops privileges; `no-new-privileges` prevents that helper from working and makes Chromium abort. The project still forbids `--no-sandbox`.
+Chromium is launched with `--disable-setuid-sandbox`, which disables only the legacy SUID helper and uses Chromium's unprivileged user-namespace sandbox instead. The project forbids `--no-sandbox` and does not grant `SYS_ADMIN` to the browser container.
 
 Xpra is published by the VPN namespace and binds to `127.0.0.1` on the VM by default. The recommended access path is an SSH tunnel instead of exposing plain Xpra TCP to a broader network.
 
