@@ -75,7 +75,7 @@ The Chrome profile itself is stored in a per-account Docker named volume.
 
 ## 3. Supply WireGuard connectivity
 
-You can use an existing WireGuard provider/configuration, or provision your own external Debian/Ubuntu exit server with the included native installer.
+You can use an existing WireGuard provider/configuration, or provision your own external Debian/Ubuntu exit server with the included native tooling.
 
 ### Option A: existing WireGuard config
 
@@ -95,7 +95,7 @@ AllowedIPs = 0.0.0.0/0
 
 ### Option B: provision an external WireGuard server
 
-On the external Debian/Ubuntu server:
+On the external Debian/Ubuntu server, bootstrap the server and create the first peer:
 
 ```bash
 sudo ./scripts/install-wireguard-server.sh \
@@ -108,7 +108,8 @@ sudo ./scripts/install-wireguard-server.sh \
 The installer:
 
 - installs `wireguard-tools` and `nftables`;
-- generates and persists server/client keys under `/etc/wireguard/rbs-keys`;
+- generates and persists the server key and first client key under `/etc/wireguard/rbs-keys`;
+- persists server endpoint/interface metadata in `/etc/wireguard/rbs-server.env` for later peer operations;
 - self-heals missing public-key files from their private keys;
 - enables persistent IPv4 forwarding;
 - manages only the dedicated nftables table `inet rbs_wg`;
@@ -121,7 +122,22 @@ Copy `/root/account-01.conf` securely to the browser VM as:
 state/accounts/account-01/wireguard.conf
 ```
 
-To add another independent client on the same exit server, rerun the installer with a new name/address, for example `account-02` and `10.77.0.3/32`. The server is regenerated deterministically without duplicating existing peers.
+### Add another peer on the same exit server
+
+For each additional browser profile that should use the same external WireGuard server/public IP, create a **new WireGuard peer with its own key and tunnel address**:
+
+```bash
+sudo ./scripts/add-wireguard-peer.sh \
+  --client-name account-02 \
+  --client-address 10.77.0.3/32 \
+  --output /root/account-02.conf
+```
+
+Then copy `/root/account-02.conf` to the matching browser account as its `wireguard.conf`.
+
+`add-wireguard-peer.sh` reuses the existing server private key and persisted endpoint metadata. It generates a dedicated client key only if that peer does not already exist, rejects an address already assigned to another peer, rebuilds the server peer list deterministically, and applies the new peer to the running interface. Re-running the same client name is idempotent and preserves that client's private key; changing its address updates the peer rather than creating a duplicate.
+
+Do **not** copy the exact same WireGuard client config/private key into multiple Gluetun containers. Use one peer per browser profile even when several profiles intentionally share the same external server and public exit IP.
 
 Do not commit generated WireGuard private keys or client configurations.
 
@@ -172,11 +188,11 @@ Each account currently receives:
 
 - a separate Compose project;
 - a separate Gluetun container and network namespace;
-- a separate WireGuard client configuration;
+- a separate WireGuard client configuration and peer key;
 - a separate Chrome profile volume;
 - a separate Xpra password and host port.
 
-Multiple accounts may use **the same external WireGuard server/public exit IP** while using separate WireGuard peer keys. This preserves per-account tunnel state while sharing the same server egress IP.
+Multiple accounts may use **the same external WireGuard server/public exit IP** while using separate WireGuard peer keys. This is the recommended model when identities should share egress IP but retain independent tunnel/firewall state.
 
 Using the exact same WireGuard client key/config simultaneously from two independent Gluetun containers is not recommended: WireGuard associates one peer public key with its latest observed endpoint, so concurrent copies can cause endpoint roaming/flapping. Sharing one single Gluetun namespace between multiple browsers is technically possible, but is not implemented in v1 and reduces network isolation between those browser identities.
 
@@ -212,11 +228,13 @@ sudo ./rbs up account-01
 ├── config/
 ├── docs/
 ├── scripts/
+│   ├── add-wireguard-peer.sh
 │   ├── bootstrap-debian.sh
 │   ├── install-seccomp-profile.sh
 │   └── install-wireguard-server.sh
 ├── tests/
 │   ├── integration/
+│   ├── add-wireguard-peer-static.sh
 │   ├── static.sh
 │   └── wireguard-server-static.sh
 ├── compose.yaml
