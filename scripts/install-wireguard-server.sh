@@ -48,7 +48,10 @@ done
 [[ -n "$CLIENT_ADDRESS" ]] || { printf -- '--client-address is required\n' >&2; exit 2; }
 [[ "$WG_IF" =~ ^[A-Za-z0-9_.-]+$ && ${#WG_IF} -le 15 ]] || { printf 'Invalid WireGuard interface name.\n' >&2; exit 2; }
 [[ "$CLIENT_NAME" =~ ^[A-Za-z0-9_.-]+$ ]] || { printf 'Invalid client name.\n' >&2; exit 2; }
-[[ "$LISTEN_PORT" =~ ^[0-9]+$ ]] && (( LISTEN_PORT >= 1 && LISTEN_PORT <= 65535 )) || { printf 'Invalid listen port.\n' >&2; exit 2; }
+if [[ ! "$LISTEN_PORT" =~ ^[0-9]+$ ]] || (( LISTEN_PORT < 1 || LISTEN_PORT > 65535 )); then
+  printf 'Invalid listen port.\n' >&2
+  exit 2
+fi
 [[ "$SERVER_ADDRESS" =~ ^[0-9.]+/[0-9]+$ ]] || { printf 'Only IPv4 --server-address is supported.\n' >&2; exit 2; }
 [[ "$CLIENT_ADDRESS" =~ ^[0-9.]+/[0-9]+$ ]] || { printf 'Only IPv4 --client-address is supported.\n' >&2; exit 2; }
 
