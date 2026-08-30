@@ -15,7 +15,8 @@
 - Browser egress is fail-closed: `network_mode: service:vpn` is mandatory.
 - Xpra binds to `127.0.0.1` by default.
 - Browser runs unprivileged and Chromium sandboxing stays enabled.
-- Browser drops all Docker capabilities; do not use `no-new-privileges`, which breaks Debian Chromium's setuid sandbox helper.
+- Browser drops all Docker capabilities and uses `no-new-privileges`.
+- Chromium uses the unprivileged user-namespace sandbox via `--disable-setuid-sandbox`; `--no-sandbox` and `SYS_ADMIN` are forbidden.
 - Runtime credentials and profile data are never committed.
 - The Debian VM itself remains headless; GUI dependencies live inside the browser container.
 
@@ -33,7 +34,7 @@
 
 - [ ] **Step 1: Write the failing static test**
 
-The test must require `compose.yaml`, `browser/Dockerfile`, `browser/entrypoint.sh`, `.gitignore`, `rbs`, and `config/wireguard.example.conf`; assert `network_mode: service:vpn`; reject host networking, privileged browser mode, `--no-sandbox`, and incompatible `no-new-privileges`; require explicit `chromium-sandbox` and `xpra-x11`; and require loopback as the sample Xpra bind.
+The test must require `compose.yaml`, `browser/Dockerfile`, `browser/entrypoint.sh`, `browser/start-browser.sh`, `.gitignore`, `rbs`, and `config/wireguard.example.conf`; assert `network_mode: service:vpn`; reject host networking, privileged browser mode, `SYS_ADMIN`, and `--no-sandbox`; require `no-new-privileges`, `--disable-setuid-sandbox`, explicit `xpra-x11`, and loopback as the sample Xpra bind.
 
 - [ ] **Step 2: Run it and verify RED**
 
@@ -43,7 +44,7 @@ Expected: non-zero exit because the production stack files do not exist yet.
 
 - [ ] **Step 3: Add CI around the contract**
 
-CI runs ShellCheck, the static test, synthetic `docker compose config`, a browser-image build, and an Xpra/Chromium runtime smoke test under the production browser capability policy.
+CI runs ShellCheck, the static test, synthetic `docker compose config`, a browser-image build, and an Xpra/Chromium runtime smoke test under the production browser security policy.
 
 - [ ] **Step 4: Commit**
 
@@ -71,15 +72,15 @@ Expected: FAIL from required stack files.
 
 - [ ] **Step 2: Add the minimal Compose topology**
 
-Use `qmcgaw/gluetun:v3.41.1`, custom WireGuard mode, `NET_ADMIN`, `/dev/net/tun`, `FIREWALL_INPUT_PORTS=14500`, and `${XPRA_BIND_IP:-127.0.0.1}:${XPRA_PORT}:14500`. The browser service uses `network_mode: service:vpn`, no ports, `cap_drop: [ALL]`, and a named profile volume. Do not set `no-new-privileges`; Debian Chromium's setuid sandbox helper requires its controlled SUID transition.
+Use `qmcgaw/gluetun:v3.41.1`, custom WireGuard mode, `NET_ADMIN`, `/dev/net/tun`, `FIREWALL_INPUT_PORTS=14500`, and `${XPRA_BIND_IP:-127.0.0.1}:${XPRA_PORT}:14500`. The browser service uses `network_mode: service:vpn`, no ports, `cap_drop: [ALL]`, `no-new-privileges`, and a named profile volume. Do not grant `SYS_ADMIN`.
 
 - [ ] **Step 3: Add the browser image**
 
-Use Debian 13 slim. Install Chromium plus `chromium-sandbox`, and Xpra stable plus `xpra-x11` from the signed Trixie Xpra repository. Create UID/GID 1000 `browser`, copy the entrypoint, and run as that user.
+Use Debian 13 slim. Install Chromium and Xpra stable plus `xpra-x11` from the signed Trixie Xpra repository. Create UID/GID 1000 `browser`, copy the entrypoint, and run as that user.
 
-- [ ] **Step 4: Add Xpra launch**
+- [ ] **Step 4: Add Xpra and Chromium launch**
 
-Start `xpra seamless :100` on `0.0.0.0:14500` with `auth=file(filename=/run/secrets/xpra_password)`, disable unneeded printer/webcam/pulseaudio/mdns features, and start Chromium with `/home/browser/profile` without `--no-sandbox`.
+Start `xpra seamless :100` on `0.0.0.0:14500` with `auth=file(filename=/run/secrets/xpra_password)`, disable unneeded printer/webcam/pulseaudio/mdns features, and start Chromium with `/home/browser/profile`, `--disable-setuid-sandbox`, and without `--no-sandbox`.
 
 - [ ] **Step 5: Verify GREEN for static, Compose, and runtime tests**
 
@@ -87,7 +88,7 @@ Run: `bash tests/static.sh`
 
 Run: `docker compose --env-file .env.account.example config`
 
-Run the CI browser image smoke test with `--network none --cap-drop ALL` and confirm both Xpra and Chromium remain running.
+Run the CI browser image smoke test with `--network none --cap-drop ALL --security-opt no-new-privileges:true` and confirm both Xpra and Chromium remain running.
 
 Expected: all succeed after synthetic secret/config files are prepared by CI.
 
@@ -148,7 +149,7 @@ Install Docker's official signed repository and packages `docker-ce`, `docker-ce
 
 - [ ] **Step 3: Write public documentation**
 
-Document Proxmox VM expectations, quick start, Xpra SSH tunnel access, per-account workflow, kill-switch semantics, leak testing, upgrades, Chromium sandbox constraints, and threat-model limitations.
+Document Proxmox VM expectations, quick start, Xpra SSH tunnel access, per-account workflow, kill-switch semantics, leak testing, upgrades, Chromium user-namespace sandbox requirements, and threat-model limitations.
 
 - [ ] **Step 4: Verify all repository checks**
 
