@@ -182,6 +182,14 @@ Xpra prompts for the account password. Retrieve it on the VM only when needed:
 sudo ./rbs password account-01
 ```
 
+For repeat connections, generate a reusable Xpra session file and separate password file:
+
+```bash
+sudo ./rbs client-config account-01
+```
+
+The generated files are written under `state/accounts/account-01/client/`. Copy both to `~/.config/xpra/rbs/` on the client machine. For the default `XPRA_BIND_IP=0.0.0.0`, edit the generated `.xpra` file once and replace `BROWSER_VM_LAN_IP` with the VM's LAN address. The session file enables `autoconnect=true` and `window-close=disconnect`, and loads the password from the separate mode-0600 password file.
+
 For multiple accounts the VM IP stays the same and only the port changes, for example `14500`, `14501`, `14502`.
 
 Do **not** port-forward these plain Xpra TCP ports from your router or expose them on a public/WAN interface. If you need access across an untrusted network, override the account to `XPRA_BIND_IP=127.0.0.1` and use SSH or another encrypted management tunnel.
@@ -223,6 +231,7 @@ For a production deployment, also verify the expected exit IP and DNS/WebRTC beh
 sudo ./rbs status account-01
 sudo ./rbs ip account-01
 sudo ./rbs logs account-01
+sudo ./rbs client-config account-01
 sudo ./rbs down account-01
 sudo ./rbs up account-01
 ```
@@ -244,6 +253,7 @@ sudo ./rbs up account-01
 ├── tests/
 │   ├── integration/
 │   ├── add-wireguard-peer-static.sh
+│   ├── client-config.sh
 │   ├── static.sh
 │   └── wireguard-server-static.sh
 ├── compose.yaml
