@@ -50,7 +50,7 @@ grep -Eq '^[[:space:]]+xpra-x11[[:space:]]*\\?$' browser/Dockerfile || fail 'xpr
 
 grep -q 'amd64-only' README.md || fail 'README must document the current amd64-only Chrome image'
 grep -q 'Google Chrome Stable' README.md || fail 'README must describe Google Chrome Stable as the default browser'
-! grep -q 'Both `amd64` and `arm64`' README.md || fail 'README must not claim unsupported Chrome ARM64 support'
+! grep -q "Both \`amd64\` and \`arm64\`" README.md || fail 'README must not claim unsupported Chrome ARM64 support'
 
 grep -q '3c28324314729dbade8287e868eef6338c42807a' scripts/install-seccomp-profile.sh \
   || fail 'Chrome seccomp base must be pinned to the reviewed Moby profile commit'
