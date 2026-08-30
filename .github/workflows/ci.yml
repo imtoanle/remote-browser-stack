@@ -116,7 +116,7 @@ jobs:
           printf 'seccomp-profile=%s\n' "$seccomp_profile"
           jq -e '.syscalls[] | select(.action == "SCMP_ACT_ALLOW" and (.names | index("unshare")))' "$seccomp_profile" >/dev/null
 
-      - name: Smoke test Xpra and Google Chrome Stable startup
+      - name: Smoke test Xpra authentication and Google Chrome Stable startup
         run: |
           password_file="$(mktemp)"
           seccomp_profile="$(bash ./scripts/install-seccomp-profile.sh)"
@@ -154,6 +154,9 @@ jobs:
               exit 1
             '; then
               docker exec rbs-browser-smoke google-chrome-stable --version
+              docker exec rbs-browser-smoke xpra info tcp://127.0.0.1:14500/ \
+                --challenge-handlers=file:filename=/run/secrets/xpra_password \
+                --debug=auth >/dev/null
               exit 0
             fi
 
