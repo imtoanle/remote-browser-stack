@@ -51,7 +51,7 @@ for command in create up down logs status ip connect doctor; do
 done
 grep -q 'PLACEHOLDER_PRIVATE_KEY' rbs || fail 'rbs must reject the example private key'
 grep -q 'ensure_seccomp_profile' rbs || fail 'rbs up must provision the Chromium seccomp profile'
-grep -Fq 'bash "$ROOT_DIR/scripts/install-seccomp-profile.sh"' rbs \
+grep -Fq "bash \"\$ROOT_DIR/scripts/install-seccomp-profile.sh\"" rbs \
   || fail 'rbs must invoke the seccomp installer through bash so checkout mode bits cannot break startup'
 
 grep -q 'VERSION_CODENAME' scripts/bootstrap-debian.sh || fail 'bootstrap must validate Debian codename'
