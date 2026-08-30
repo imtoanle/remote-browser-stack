@@ -3,12 +3,10 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
-for command in docker wg curl; do
-  command -v "$command" >/dev/null 2>&1 || {
-    printf '%s is required for the WireGuard kill-switch integration test\n' "$command" >&2
-    exit 1
-  }
-done
+command -v docker >/dev/null 2>&1 || {
+  printf 'docker is required for the WireGuard kill-switch integration test\n' >&2
+  exit 1
+}
 [[ -c /dev/net/tun ]] || { printf '/dev/net/tun is required\n' >&2; exit 1; }
 
 suffix="${GITHUB_RUN_ID:-local}-$$"
@@ -26,11 +24,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
+docker build -t "$server_image" -f tests/integration/Dockerfile.wireguard-server . >/dev/null
+
 umask 077
-wg genkey > "$tmp/server.key"
-wg pubkey < "$tmp/server.key" > "$tmp/server.pub"
-wg genkey > "$tmp/client.key"
-wg pubkey < "$tmp/client.key" > "$tmp/client.pub"
+docker run --rm "$server_image" wg genkey > "$tmp/server.key"
+docker run --rm -i "$server_image" wg pubkey < "$tmp/server.key" > "$tmp/server.pub"
+docker run --rm "$server_image" wg genkey > "$tmp/client.key"
+docker run --rm -i "$server_image" wg pubkey < "$tmp/client.key" > "$tmp/client.pub"
 
 cat > "$tmp/server.conf" <<EOF
 [Interface]
@@ -43,7 +43,6 @@ PublicKey = $(cat "$tmp/client.pub")
 AllowedIPs = 10.77.0.2/32
 EOF
 
-docker build -t "$server_image" -f tests/integration/Dockerfile.wireguard-server . >/dev/null
 docker network create "$network" >/dev/null
 
 docker run -d \
@@ -86,7 +85,6 @@ docker run -d \
   --device /dev/net/tun:/dev/net/tun \
   -e VPN_SERVICE_PROVIDER=custom \
   -e VPN_TYPE=wireguard \
-  -e FIREWALL=on \
   -v "$tmp/client.conf:/gluetun/wireguard/wg0.conf:ro" \
   qmcgaw/gluetun:v3.41.1 >/dev/null
 
@@ -126,7 +124,6 @@ grep -q '^ip=' "$tmp/healthy-trace" || {
   exit 1
 }
 
-# Confirm the server actually saw a WireGuard handshake before testing failure.
 if ! docker exec "$server" wg show wg0 latest-handshakes | awk '$2 > 0 {found=1} END {exit !found}'; then
   docker exec "$server" wg show
   printf 'No WireGuard handshake was observed on the test server\n' >&2
@@ -144,7 +141,6 @@ for _ in 1 2 3; do
   fi
 done
 
-# The probe has no independent Docker network: it must share Gluetun's namespace.
 probe_mode="$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$probe")"
 [[ "$probe_mode" == "container:${vpn}" ]] || {
   printf 'Probe unexpectedly has an independent network mode: %s\n' "$probe_mode" >&2
