@@ -166,7 +166,21 @@ jobs:
               docker exec rbs-browser-smoke xpra --version
               docker exec rbs-browser-smoke python3 -c 'import netifaces'
 
-              resolution="$(docker exec rbs-browser-smoke xdpyinfo -display :100 | awk '/resolution:/{print $2; exit}')"
+              resolution="$(docker exec rbs-browser-smoke bash -c '
+                set -e
+                xorg_pid=""
+                for file in /proc/[0-9]*/cmdline; do
+                  if tr "\0" " " < "$file" 2>/dev/null | grep -q "/usr/lib/xorg/Xorg"; then
+                    xorg_pid="${file#/proc/}"
+                    xorg_pid="${xorg_pid%/cmdline}"
+                    break
+                  fi
+                done
+                test -n "$xorg_pid"
+                xauthority="$(tr "\0" "\n" < "/proc/$xorg_pid/environ" | sed -n "s/^XAUTHORITY=//p")"
+                test -n "$xauthority"
+                XAUTHORITY="$xauthority" xdpyinfo -display :100 | awk "/resolution:/{print \$2; exit}"
+              ')"
               printf 'virtual-display-resolution=%s\n' "$resolution"
               test "$resolution" = '96x96'
 
