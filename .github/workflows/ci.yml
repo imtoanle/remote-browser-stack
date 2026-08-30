@@ -168,21 +168,25 @@ jobs:
 
               resolution="$(docker exec -u 0 rbs-browser-smoke bash -c '
                 set -e
-                xorg_pid=""
-                for comm in /proc/[0-9]*/comm; do
-                  if [[ "$(cat "$comm" 2>/dev/null)" == "Xorg" ]]; then
-                    xorg_pid="${comm#/proc/}"
-                    xorg_pid="${xorg_pid%/comm}"
-                    break
+                chrome_pid=""
+                for environ in /proc/[0-9]*/environ; do
+                  if tr "\0" "\n" < "$environ" 2>/dev/null | grep -qx "DISPLAY=:100"; then
+                    cmdline="${environ%/environ}/cmdline"
+                    if tr "\0" " " < "$cmdline" 2>/dev/null | grep -q "/opt/google/chrome/chrome"; then
+                      chrome_pid="${environ#/proc/}"
+                      chrome_pid="${chrome_pid%/environ}"
+                      break
+                    fi
                   fi
                 done
-                test -n "$xorg_pid"
-                xorg_cmdline="$(tr "\0" " " < "/proc/$xorg_pid/cmdline")"
-                printf "xorg-cmdline=%s\n" "$xorg_cmdline" >&2
-                xauthority="$(tr "\0" "\n" < "/proc/$xorg_pid/cmdline" | awk '\''found { print; exit } $0 == "-auth" { found=1 }'\'')"
+                test -n "$chrome_pid"
+                display="$(tr "\0" "\n" < "/proc/$chrome_pid/environ" | sed -n "s/^DISPLAY=//p")"
+                xauthority="$(tr "\0" "\n" < "/proc/$chrome_pid/environ" | sed -n "s/^XAUTHORITY=//p")"
+                test "$display" = ":100"
                 test -n "$xauthority"
-                ls -l "$xauthority" >&2
-                XAUTHORITY="$xauthority" xdpyinfo -display :100 | awk "/resolution:/{print \$2; exit}"
+                test -r "$xauthority"
+                printf "chrome-display=%s xauthority=%s\n" "$display" "$xauthority" >&2
+                XAUTHORITY="$xauthority" xdpyinfo -display "$display" | awk "/resolution:/{print \$2; exit}"
               ')"
               printf 'virtual-display-resolution=%s\n' "$resolution"
               test "$resolution" = '96x96'
