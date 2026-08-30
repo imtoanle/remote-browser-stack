@@ -119,7 +119,7 @@ jobs:
           printf 'seccomp-profile=%s\n' "$seccomp_profile"
           jq -e '.syscalls[] | select(.action == "SCMP_ACT_ALLOW" and (.names | index("unshare")))' "$seccomp_profile" >/dev/null
 
-      - name: Smoke test Xpra authentication and Google Chrome Stable startup
+      - name: Smoke test Xpra authentication, DPI and Google Chrome Stable startup
         run: |
           secret_dir="$(mktemp -d)"
           password_file="$secret_dir/xpra-password"
@@ -131,9 +131,6 @@ jobs:
           }
           trap cleanup EXIT
 
-          # Match the local-Compose production contract: the account directory
-          # is private, while the file-backed secret itself is readable by the
-          # non-root browser UID after being bind-mounted into the container.
           chmod 0700 "$secret_dir"
           printf '%s' 'ci-only-password' > "$password_file"
           chmod 0644 "$password_file"
@@ -167,6 +164,12 @@ jobs:
             '; then
               docker exec rbs-browser-smoke google-chrome-stable --version
               docker exec rbs-browser-smoke xpra --version
+              docker exec rbs-browser-smoke python3 -c 'import netifaces'
+
+              resolution="$(docker exec rbs-browser-smoke xdpyinfo -display :100 | awk '/resolution:/{print $2; exit}')"
+              printf 'virtual-display-resolution=%s\n' "$resolution"
+              test "$resolution" = '96x96'
+
               docker exec rbs-browser-smoke xpra info tcp://127.0.0.1:14500/ \
                 --challenge-handlers=file:filename=/run/secrets/xpra_password \
                 --debug=auth >/dev/null
