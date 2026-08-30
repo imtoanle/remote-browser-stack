@@ -116,6 +116,23 @@ next_port() {
   fail 'no free Xpra port found in range 14500-14599'
 }
 
+prepare_xpra_password() {
+  local account="$1"
+  local dir file
+  dir="$(account_dir "$account")"
+  file="$dir/xpra-password"
+
+  [[ -s "$file" ]] || fail 'Xpra password file is missing or empty'
+
+  # Docker Compose implements file-backed secrets as bind mounts and cannot
+  # remap uid/gid/mode for them. Xpra runs as UID 1000, so the bind-mounted
+  # password must be world-readable inside the container. Keep the account
+  # directory host-private (0700) so other host users still cannot traverse to
+  # or read the password file.
+  chmod 0700 "$dir"
+  chmod 0644 "$file"
+}
+
 create_account() {
   local account="$1"
   local dir env_file port
@@ -131,7 +148,7 @@ create_account() {
   port="$(next_port)"
 
   cp "$ROOT_DIR/config/wireguard.example.conf" "$dir/wireguard.conf"
-  openssl rand -hex 24 > "$dir/xpra-password"
+  openssl rand -hex 24 | tr -d '\r\n' > "$dir/xpra-password"
   cat > "$env_file" <<EOF
 ACCOUNT_NAME=$account
 XPRA_BIND_IP=0.0.0.0
@@ -139,7 +156,8 @@ XPRA_PORT=$port
 START_URL=about:blank
 TZ=UTC
 EOF
-  chmod 0600 "$dir/wireguard.conf" "$dir/xpra-password" "$env_file"
+  chmod 0600 "$dir/wireguard.conf" "$env_file"
+  prepare_xpra_password "$account"
 
   cat <<EOF
 Created account: $account
@@ -167,7 +185,6 @@ validate_wireguard() {
   grep -Eq '^[[:space:]]*Endpoint[[:space:]]*=' "$file" || fail 'WireGuard config has no Endpoint'
   grep -Eq '^[[:space:]]*AllowedIPs[[:space:]]*=.*0\.0\.0\.0/0' "$file" \
     || fail 'WireGuard AllowedIPs must include 0.0.0.0/0 for fail-closed browser egress'
-  [[ -s "$(account_dir "$account")/xpra-password" ]] || fail 'Xpra password file is missing or empty'
 }
 
 doctor() {
@@ -222,6 +239,7 @@ case "$command" in
     [[ -n "$account" ]] || fail 'account name required'
     require_account "$account"
     require_command docker
+    prepare_xpra_password "$account"
     validate_wireguard "$account"
     ensure_seccomp_profile
     compose "$account" up -d --build

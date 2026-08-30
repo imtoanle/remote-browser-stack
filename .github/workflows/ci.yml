@@ -37,6 +37,8 @@ jobs:
         run: |
           scripts=(
             tests/static.sh
+            tests/xpra-password.sh
+            tests/chrome-profile-lock.sh
             tests/wireguard-server-static.sh
             tests/add-wireguard-peer-static.sh
             tests/integration/wireguard-killswitch.sh
@@ -54,6 +56,8 @@ jobs:
         run: |
           shellcheck \
             tests/static.sh \
+            tests/xpra-password.sh \
+            tests/chrome-profile-lock.sh \
             tests/wireguard-server-static.sh \
             tests/add-wireguard-peer-static.sh \
             tests/integration/wireguard-killswitch.sh \
@@ -73,6 +77,7 @@ jobs:
           mkdir -p state/accounts/example
           cp config/wireguard.example.conf state/accounts/example/wireguard.conf
           printf '%s' 'ci-only-password' > state/accounts/example/xpra-password
+          chmod 0644 state/accounts/example/xpra-password
           seccomp_profile="$(bash ./scripts/install-seccomp-profile.sh)"
           ACCOUNT_DIR="$PWD/state/accounts/example" \
             SECCOMP_PROFILE="$seccomp_profile" \
@@ -114,18 +119,27 @@ jobs:
           printf 'seccomp-profile=%s\n' "$seccomp_profile"
           jq -e '.syscalls[] | select(.action == "SCMP_ACT_ALLOW" and (.names | index("unshare")))' "$seccomp_profile" >/dev/null
 
-      - name: Smoke test Xpra and Google Chrome Stable startup
+      - name: Smoke test Xpra authentication and Google Chrome Stable startup
         run: |
-          password_file="$(mktemp)"
+          secret_dir="$(mktemp -d)"
+          password_file="$secret_dir/xpra-password"
           seccomp_profile="$(bash ./scripts/install-seccomp-profile.sh)"
-          printf '%s' 'ci-only-password' > "$password_file"
-          chmod 0600 "$password_file"
 
           cleanup() {
             docker rm -f rbs-browser-smoke >/dev/null 2>&1 || true
-            rm -f "$password_file"
+            rm -rf "$secret_dir"
           }
           trap cleanup EXIT
+
+          # Match the local-Compose production contract: the account directory
+          # is private, while the file-backed secret itself is readable by the
+          # non-root browser UID after being bind-mounted into the container.
+          chmod 0700 "$secret_dir"
+          printf '%s' 'ci-only-password' > "$password_file"
+          chmod 0644 "$password_file"
+
+          test "$(stat -c '%a' "$secret_dir")" = '700'
+          test "$(stat -c '%a' "$password_file")" = '644'
 
           docker run -d \
             --name rbs-browser-smoke \
@@ -152,6 +166,10 @@ jobs:
               exit 1
             '; then
               docker exec rbs-browser-smoke google-chrome-stable --version
+              docker exec rbs-browser-smoke xpra --version
+              docker exec rbs-browser-smoke xpra info tcp://127.0.0.1:14500/ \
+                --challenge-handlers=file:filename=/run/secrets/xpra_password \
+                --debug=auth >/dev/null
               exit 0
             fi
 

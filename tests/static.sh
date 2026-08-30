@@ -21,6 +21,8 @@ required=(
   scripts/install-seccomp-profile.sh
   scripts/install-wireguard-server.sh
   scripts/add-wireguard-peer.sh
+  tests/xpra-password.sh
+  tests/chrome-profile-lock.sh
   tests/wireguard-server-static.sh
   tests/add-wireguard-peer-static.sh
   tests/integration/Dockerfile.wireguard-server
@@ -47,7 +49,9 @@ grep -q 'trusted LAN' README.md || fail 'README must document trusted-LAN Xpra a
 ! grep -q 'default loopback binding' README.md || fail 'README must not describe loopback as the default Xpra binding'
 grep -q 'state/' .gitignore || fail 'runtime state must be ignored'
 ! grep -R --line-number --fixed-strings -- '--no-sandbox' browser compose.yaml rbs || fail 'disabling the Chrome sandbox is forbidden'
-grep -q -- '--disable-setuid-sandbox' browser/start-browser.sh || fail 'Chrome must use the unprivileged user-namespace sandbox instead of the SUID helper'
+! grep -q -- '--disable-setuid-sandbox' browser/start-browser.sh || fail 'Chrome launcher must not use the unsupported --disable-setuid-sandbox flag'
+grep -q -- '--dpi=96' browser/entrypoint.sh || fail 'Xpra must start at a deterministic 96 DPI'
+! grep -q -- '--file-transfer=no' browser/entrypoint.sh || fail 'Xpra 6.5.3 client crashes when the file capability is omitted by --file-transfer=no'
 grep -Eq '^[[:space:]]+google-chrome-stable[[:space:]]*\\?$' browser/Dockerfile || fail 'browser image must install Google Chrome Stable'
 ! grep -Eq '^[[:space:]]+chromium[[:space:]]*\\?$' browser/Dockerfile || fail 'Debian Chromium package must not be the default browser'
 grep -q 'google-chrome-stable' browser/start-browser.sh || fail 'browser launcher must execute Google Chrome Stable'
@@ -83,6 +87,8 @@ grep -q 'docker-compose-plugin' scripts/bootstrap-debian.sh || fail 'bootstrap m
 grep -Eq '^[[:space:]]+jq[[:space:]]*\\?$' scripts/bootstrap-debian.sh || fail 'bootstrap must install jq for seccomp profile generation'
 ! grep -Eqi 'gnome|kde|xfce|lightdm|gdm' scripts/bootstrap-debian.sh || fail 'bootstrap must remain headless'
 
+bash tests/xpra-password.sh >/dev/null || fail 'Xpra password generation contract failed'
+bash tests/chrome-profile-lock.sh >/dev/null || fail 'Chrome profile stale-lock cleanup contract failed'
 bash tests/wireguard-server-static.sh >/dev/null || fail 'WireGuard server static contract failed'
 bash tests/add-wireguard-peer-static.sh >/dev/null || fail 'WireGuard peer lifecycle contract failed'
 grep -q 'network_mode: service:vpn' docs/superpowers/specs/2026-08-30-chrome-wireguard-integration-design.md || fail 'design must preserve browser-vpn namespace sharing'
