@@ -25,6 +25,7 @@ jobs:
           set -euo pipefail
           command -v docker >/dev/null || { echo 'docker is required on the self-hosted runner' >&2; exit 1; }
           docker compose version >/dev/null || { echo 'docker compose plugin is required on the self-hosted runner' >&2; exit 1; }
+          command -v curl >/dev/null || { echo 'curl is required on the self-hosted runner' >&2; exit 1; }
           if ! command -v shellcheck >/dev/null; then
             echo 'shellcheck is required on the self-hosted runner' >&2
             exit 1
@@ -33,14 +34,14 @@ jobs:
       - name: Shell syntax
         run: |
           bash -n tests/static.sh
-          for script in rbs scripts/bootstrap-debian.sh browser/entrypoint.sh browser/start-browser.sh; do
+          for script in rbs scripts/bootstrap-debian.sh scripts/install-seccomp-profile.sh browser/entrypoint.sh browser/start-browser.sh; do
             if [[ -f "$script" ]]; then bash -n "$script"; fi
           done
 
       - name: ShellCheck
         run: |
           files=(tests/static.sh)
-          for script in rbs scripts/bootstrap-debian.sh browser/entrypoint.sh browser/start-browser.sh; do
+          for script in rbs scripts/bootstrap-debian.sh scripts/install-seccomp-profile.sh browser/entrypoint.sh browser/start-browser.sh; do
             if [[ -f "$script" ]]; then files+=("$script"); fi
           done
           shellcheck "${files[@]}"
@@ -53,7 +54,10 @@ jobs:
           mkdir -p state/accounts/example
           cp config/wireguard.example.conf state/accounts/example/wireguard.conf
           printf '%s' 'ci-only-password' > state/accounts/example/xpra-password
-          docker compose --env-file .env.account.example config >/dev/null
+          seccomp_profile="$(./scripts/install-seccomp-profile.sh)"
+          ACCOUNT_DIR="$PWD/state/accounts/example" \
+            SECCOMP_PROFILE="$seccomp_profile" \
+            docker compose --env-file .env.account.example config >/dev/null
 
   build-browser:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
@@ -66,6 +70,7 @@ jobs:
         run: |
           set -euo pipefail
           command -v docker >/dev/null || { echo 'docker is required on the self-hosted runner' >&2; exit 1; }
+          command -v curl >/dev/null || { echo 'curl is required on the self-hosted runner' >&2; exit 1; }
 
       - name: Build browser image
         run: docker build --pull -t remote-browser-stack:ci browser
@@ -73,6 +78,7 @@ jobs:
       - name: Smoke test Xpra and Chromium startup
         run: |
           password_file="$(mktemp)"
+          seccomp_profile="$(./scripts/install-seccomp-profile.sh)"
           printf '%s' 'ci-only-password' > "$password_file"
           chmod 0600 "$password_file"
 
@@ -87,6 +93,7 @@ jobs:
             --network none \
             --cap-drop ALL \
             --security-opt no-new-privileges:true \
+            --security-opt "seccomp=$seccomp_profile" \
             --shm-size 1g \
             -e START_URL=about:blank \
             -v "$password_file:/run/secrets/xpra_password:ro" \
