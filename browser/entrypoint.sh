@@ -16,11 +16,11 @@ exec xpra seamless :100 \
   --exit-with-children=yes \
   --bind=noabstract \
   --bind-tcp="0.0.0.0:14500,auth=file(filename=${password_file})" \
+  --dpi=96 \
   --html=no \
   --mdns=no \
   --pulseaudio=no \
   --notifications=no \
   --printing=no \
   --webcam=no \
-  --file-transfer=no \
   --start-child=/usr/local/bin/start-browser
