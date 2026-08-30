@@ -9,10 +9,7 @@ if [[ ! -s "$password_file" ]]; then
 fi
 
 export XDG_RUNTIME_DIR="$HOME/.runtime"
-export XAUTHORITY="$HOME/.Xauthority"
 install -d -m 0700 "$HOME/profile" "$HOME/.xpra" "$XDG_RUNTIME_DIR"
-touch "$XAUTHORITY"
-chmod 0600 "$XAUTHORITY"
 
 # Xpra expands $XAUTHORITY, $XDG_RUNTIME_DIR and $DISPLAY when it launches
 # the virtual X server, so these placeholders must remain literal here.
