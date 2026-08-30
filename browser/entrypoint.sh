@@ -8,13 +8,15 @@ if [[ ! -s "$password_file" ]]; then
   exit 1
 fi
 
-install -d -m 0700 "$HOME/profile" "$HOME/.xpra"
+export XDG_RUNTIME_DIR="$HOME/.runtime"
+install -d -m 0700 "$HOME/profile" "$HOME/.xpra" "$XDG_RUNTIME_DIR"
 
 exec xpra seamless :100 \
   --daemon=no \
   --exit-with-children=yes \
   --bind=noabstract \
   --bind-tcp="0.0.0.0:14500,auth=file(filename=${password_file})" \
+  --html=no \
   --mdns=no \
   --pulseaudio=no \
   --notifications=no \
