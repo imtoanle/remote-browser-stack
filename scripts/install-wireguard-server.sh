@@ -26,6 +26,32 @@ Usage: sudo ./scripts/install-wireguard-server.sh \
 EOF
 }
 
+validate_ipv4_cidr() {
+  local cidr="$1"
+  local ip prefix octet extra
+  local -a octets
+
+  [[ "$cidr" == */* ]] || return 1
+  ip="${cidr%/*}"
+  prefix="${cidr##*/}"
+  [[ "$prefix" =~ ^[0-9]+$ ]] || return 1
+  if (( prefix > 32 )); then
+    return 1
+  fi
+
+  IFS='.' read -r -a octets <<< "$ip"
+  [[ "${#octets[@]}" -eq 4 ]] || return 1
+  extra="${ip//[0-9.]/}"
+  [[ -z "$extra" ]] || return 1
+
+  for octet in "${octets[@]}"; do
+    [[ "$octet" =~ ^[0-9]{1,3}$ ]] || return 1
+    if (( 10#$octet > 255 )); then
+      return 1
+    fi
+  done
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --endpoint) ENDPOINT="${2:-}"; shift 2 ;;
@@ -52,8 +78,8 @@ if [[ ! "$LISTEN_PORT" =~ ^[0-9]+$ ]] || (( LISTEN_PORT < 1 || LISTEN_PORT > 655
   printf 'Invalid listen port.\n' >&2
   exit 2
 fi
-[[ "$SERVER_ADDRESS" =~ ^[0-9.]+/[0-9]+$ ]] || { printf 'Only IPv4 --server-address is supported.\n' >&2; exit 2; }
-[[ "$CLIENT_ADDRESS" =~ ^[0-9.]+/[0-9]+$ ]] || { printf 'Only IPv4 --client-address is supported.\n' >&2; exit 2; }
+validate_ipv4_cidr "$SERVER_ADDRESS" || { printf 'Invalid IPv4 --server-address: %s\n' "$SERVER_ADDRESS" >&2; exit 2; }
+validate_ipv4_cidr "$CLIENT_ADDRESS" || { printf 'Invalid IPv4 --client-address: %s\n' "$CLIENT_ADDRESS" >&2; exit 2; }
 
 # shellcheck disable=SC1091
 source /etc/os-release
@@ -91,13 +117,19 @@ install -d -m 0755 "$NFT_DIR"
 if [[ ! -s "$SERVER_PRIVATE" ]]; then
   umask 077
   wg genkey > "$SERVER_PRIVATE"
+fi
+if [[ ! -s "$SERVER_PUBLIC" || "$SERVER_PRIVATE" -nt "$SERVER_PUBLIC" ]]; then
   wg pubkey < "$SERVER_PRIVATE" > "$SERVER_PUBLIC"
 fi
+
 if [[ ! -s "$CLIENT_PRIVATE" ]]; then
   umask 077
   wg genkey > "$CLIENT_PRIVATE"
+fi
+if [[ ! -s "$CLIENT_PUBLIC" || "$CLIENT_PRIVATE" -nt "$CLIENT_PUBLIC" ]]; then
   wg pubkey < "$CLIENT_PRIVATE" > "$CLIENT_PUBLIC"
 fi
+
 printf '%s\n' "$CLIENT_ADDRESS" > "$CLIENT_ADDR_FILE"
 chmod 0600 "$SERVER_PRIVATE" "$CLIENT_PRIVATE" "$CLIENT_ADDR_FILE"
 chmod 0644 "$SERVER_PUBLIC" "$CLIENT_PUBLIC"
