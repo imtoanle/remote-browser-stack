@@ -14,6 +14,7 @@ RUN apt-get update \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
       chromium \
+      chromium-sandbox \
       fonts-liberation \
       fonts-noto-color-emoji \
       xauth \
