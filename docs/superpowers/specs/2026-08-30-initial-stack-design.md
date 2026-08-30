@@ -54,9 +54,9 @@ Plain Xpra TCP must not be published on every host interface by default.
 
 ## Browser container
 
-The browser image is based on Debian 13 (Trixie), installs Chromium plus Debian's `chromium-sandbox`, and installs Xpra stable plus `xpra-x11` from Xpra's signed repository. Chromium runs as an unprivileged `browser` user and retains its sandbox; `--no-sandbox` is forbidden.
+The browser image is based on Debian 13 (Trixie), installs Chromium, and installs Xpra stable plus `xpra-x11` from Xpra's signed repository. Chromium runs as an unprivileged `browser` user and retains sandboxing; `--no-sandbox` is forbidden.
 
-The container drops all Docker capabilities. Docker's `no-new-privileges` option is deliberately not used because Debian Chromium's root-owned setuid sandbox helper must perform its privilege transition to establish Linux namespaces before dropping privileges again. CI guards this compatibility requirement and smoke-tests real Chromium startup.
+The browser container drops all Docker capabilities and enables `no-new-privileges`. Chromium is launched with `--disable-setuid-sandbox`, selecting Chromium's unprivileged user-namespace sandbox instead of the legacy SUID helper. This avoids granting `SYS_ADMIN` or depending on a privileged SUID transition while retaining Chromium's Linux namespace and seccomp sandbox layers.
 
 Xpra runs in seamless mode and starts Chromium as its child. Authentication uses an Xpra password file mounted as a Docker secret rather than an environment variable.
 
@@ -64,15 +64,16 @@ Xpra runs in seamless mode and starts Chromium as its child. Authentication uses
 
 1. `browser` MUST use `network_mode: service:vpn`.
 2. `browser` MUST NOT publish ports or use host networking.
-3. `browser` MUST NOT be privileged and MUST NOT request `NET_ADMIN`.
+3. `browser` MUST NOT be privileged and MUST NOT request `NET_ADMIN` or `SYS_ADMIN`.
 4. Only `vpn` receives `NET_ADMIN` and `/dev/net/tun`.
 5. Gluetun firewall remains enabled; no configuration may disable it.
 6. No LAN bypass subnet is enabled by default.
 7. Xpra binds to loopback by default.
 8. Real WireGuard configs, Xpra passwords, and browser state MUST be ignored by Git.
 9. Chromium MUST NOT be launched with `--no-sandbox`.
-10. The browser image MUST include `chromium-sandbox` and `xpra-x11` explicitly when using `--no-install-recommends`.
-11. `no-new-privileges` MUST NOT be applied to the browser container because it breaks Debian's setuid Chromium sandbox helper.
+10. Chromium MUST select the user-namespace sandbox with `--disable-setuid-sandbox`.
+11. The browser container MUST use `no-new-privileges` and drop all Docker capabilities.
+12. The browser image MUST include `xpra-x11` explicitly when using `--no-install-recommends`.
 
 ## Operator workflow
 
@@ -97,7 +98,7 @@ CI performs four classes of checks:
 1. Shell syntax and ShellCheck for repository scripts.
 2. Static security invariants for Compose and browser launch configuration.
 3. `docker compose config` rendering with synthetic non-secret account data.
-4. Browser image build plus an Xpra/Chromium runtime smoke test under the production browser capability policy.
+4. Browser image build plus an Xpra/Chromium runtime smoke test under the production browser security policy (`non-root`, `cap_drop: ALL`, `no-new-privileges`, user-namespace sandbox).
 
 Runtime VPN verification is provided by `./rbs ip <account>`, which queries a public IP endpoint from the shared VPN namespace. Operators should also test the failure case by stopping or invalidating the tunnel and confirming Internet access fails while the Xpra session remains reachable.
 
