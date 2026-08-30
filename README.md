@@ -240,8 +240,7 @@ sudo ./rbs up account-01
 │   ├── add-wireguard-peer.sh
 │   ├── bootstrap-debian.sh
 │   ├── install-seccomp-profile.sh
-│   ├── install-wireguard-server.sh
-│   └── add-wireguard-peer.sh
+│   └── install-wireguard-server.sh
 ├── tests/
 │   ├── integration/
 │   ├── add-wireguard-peer-static.sh
