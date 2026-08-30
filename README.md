@@ -2,16 +2,18 @@
 
 Self-hosted remote browser stack with isolated browser profiles, per-account WireGuard routing, and fail-closed network rules.
 
-The stack is designed for a **headless Debian VM** (for example, a small VM on Proxmox). The VM does not need GNOME, KDE, XFCE, Xorg as a host desktop, VNC, or a physical display. Chromium and Xpra run inside containers.
+The stack targets a **headless Debian 13 VM** such as a VM on Proxmox. The VM does not need a desktop environment, VNC, or a physical display. Google Chrome Stable and Xpra run inside containers.
+
+> **Architecture note:** the current Chrome image is **amd64-only** because Google's official Linux Chrome repository publishes the package used here for amd64. ARM64 is not currently supported by this stack.
 
 ## What this solves
 
-Each account gets an independent persistent browser identity and an independent WireGuard network path:
+Each account gets an independent persistent browser profile and an independent VPN namespace:
 
 ```text
 account-01                      account-02
 ──────────                      ──────────
-Chromium profile 01             Chromium profile 02
+Chrome profile 01               Chrome profile 02
       │                               │
 Xpra session 01                 Xpra session 02
       │                               │
@@ -20,66 +22,47 @@ Gluetun / WireGuard 01          Gluetun / WireGuard 02
 public IP 01                    public IP 02
 ```
 
-The browser container shares the VPN container's network namespace. It does **not** have an independent Docker network interface, so there is no normal host/WAN route for Chromium to fall back to.
+The browser service uses `network_mode: service:vpn`, so it has no independent Docker network interface. If WireGuard becomes unavailable, Gluetun's firewall remains active and browser traffic must fail closed instead of falling back to the Debian VM's normal WAN route.
 
-If WireGuard goes down, Gluetun's firewall remains active and browser Internet traffic is dropped. Xpra management access can remain reachable so the failure can be inspected.
+CI verifies this with a real ephemeral WireGuard server, a Gluetun client, and a probe sharing the Gluetun namespace: traffic must work while the tunnel is healthy and fail after the WireGuard endpoint is stopped.
 
 ## Security model
 
-The important invariant is in `compose.yaml`:
+Only the VPN service receives `NET_ADMIN` and `/dev/net/tun`. The browser runs non-root, drops all Linux capabilities, enables `no-new-privileges`, retains Chrome's Linux sandbox, and publishes no ports directly.
 
-```yaml
-browser:
-  network_mode: "service:vpn"
-```
+Chrome is launched with `--disable-setuid-sandbox`, selecting its unprivileged user-namespace sandbox instead of the legacy SUID helper. The project forbids `--no-sandbox`, privileged browser containers, `SYS_ADMIN`, and `seccomp=unconfined` in production runtime paths.
 
-Only the `vpn` service receives `NET_ADMIN` and `/dev/net/tun`. The browser service runs as a non-root user, drops all Linux capabilities, enables `no-new-privileges`, keeps Chromium sandboxing enabled, and publishes no ports.
+Xpra is published by the VPN namespace and binds to `127.0.0.1` on the VM by default. The recommended remote access path is an SSH tunnel.
 
-Chromium is launched with `--disable-setuid-sandbox`, which disables only the legacy SUID helper and uses Chromium's unprivileged user-namespace sandbox instead. The project forbids `--no-sandbox` and does not grant `SYS_ADMIN` to the browser container.
-
-Xpra is published by the VPN namespace and binds to `127.0.0.1` on the VM by default. The recommended access path is an SSH tunnel instead of exposing plain Xpra TCP to a broader network.
-
-See [docs/security.md](docs/security.md) for the threat model and verification procedure.
+See [docs/security.md](docs/security.md) for the full threat model.
 
 ## Requirements
 
+- x86-64 / amd64 host CPU
 - Debian 13 (Trixie) VM
 - `/dev/net/tun`
 - Docker Engine + Docker Compose v2
 - one WireGuard client configuration per browser identity
 - Xpra client on the workstation used to control the remote browser
 
-Both `amd64` and `arm64` are supported by Debian Chromium and current Xpra packages. Xpra upstream documents Debian Trixie as a supported stable repository target.
+## 1. Prepare the Debian VM
 
-## 1. Prepare a minimal Debian VM
-
-A practical starting point is 2 vCPU, 2-4 GB RAM, and 16+ GB disk for a few browser identities. Actual memory requirements depend mostly on the websites opened in Chromium.
-
-No desktop environment is required.
-
-Clone the repository and run the bootstrap script:
+A practical starting point is 2 vCPU, 4 GB RAM, and 16+ GB disk. Increase RAM when several Chrome instances will run concurrently.
 
 ```bash
 sudo ./scripts/bootstrap-debian.sh
-```
-
-The bootstrap installs Docker Engine and Compose from Docker's signed Debian repository. It intentionally does **not** add your login user to the `docker` group because that group is effectively root-equivalent.
-
-Check the host:
-
-```bash
 sudo ./rbs doctor
 ```
 
-If you intentionally configure rootless Docker or explicit Docker socket access, `./rbs` can be run without `sudo`.
+The bootstrap installs Docker Engine and Compose from Docker's signed Debian repository and intentionally does not add users to the root-equivalent `docker` group.
 
-## 2. Create an identity
+## 2. Create an account
 
 ```bash
 sudo ./rbs create account-01
 ```
 
-This creates private runtime state under:
+Runtime state is stored under the gitignored directory:
 
 ```text
 state/accounts/account-01/
@@ -88,86 +71,126 @@ state/accounts/account-01/
 └── xpra-password
 ```
 
-`state/` is ignored by Git.
+The Chrome profile itself is stored in a per-account Docker named volume.
 
-The Chromium profile itself is stored in a Docker named volume scoped to that account's Compose project, so it survives container recreation without host UID/GID problems.
+## 3. Supply WireGuard connectivity
 
-## 3. Add the account's WireGuard configuration
+You can use an existing WireGuard provider/configuration, or provision your own external Debian/Ubuntu exit server with the included native installer.
 
-Replace the generated example in:
+### Option A: existing WireGuard config
+
+Replace:
 
 ```text
 state/accounts/account-01/wireguard.conf
 ```
 
-with the real client configuration supplied by your WireGuard/VPN endpoint.
-
-The first version deliberately requires a full IPv4 default route:
+with a full-tunnel configuration containing at least:
 
 ```ini
-AllowedIPs = 0.0.0.0/0, ::/0
+AllowedIPs = 0.0.0.0/0
 ```
 
-`./rbs up` refuses the committed placeholders and refuses a config without `0.0.0.0/0`.
+`./rbs up` rejects committed placeholders and a configuration without the IPv4 default route.
 
-Never put real WireGuard credentials in `config/wireguard.example.conf` or any tracked file.
+### Option B: provision an external WireGuard server
 
-## 4. Start the browser
+On the external Debian/Ubuntu server:
+
+```bash
+sudo ./scripts/install-wireguard-server.sh \
+  --endpoint vpn.example.com \
+  --client-name account-01 \
+  --client-address 10.77.0.2/32 \
+  --output /root/account-01.conf
+```
+
+The installer:
+
+- installs `wireguard-tools` and `nftables`;
+- generates and persists server/client keys under `/etc/wireguard/rbs-keys`;
+- self-heals missing public-key files from their private keys;
+- enables persistent IPv4 forwarding;
+- manages only the dedicated nftables table `inet rbs_wg`;
+- enables `wg-quick@wg0` and nftables;
+- emits a Gluetun-compatible full-tunnel client config.
+
+Copy `/root/account-01.conf` securely to the browser VM as:
+
+```text
+state/accounts/account-01/wireguard.conf
+```
+
+To add another independent client on the same exit server, rerun the installer with a new name/address, for example `account-02` and `10.77.0.3/32`. The server is regenerated deterministically without duplicating existing peers.
+
+Do not commit generated WireGuard private keys or client configurations.
+
+## 4. Start and inspect the browser
 
 ```bash
 sudo ./rbs up account-01
-```
-
-The first start builds the browser image containing Debian 13, Chromium, and Xpra stable.
-
-Check status and the observed public IP:
-
-```bash
 sudo ./rbs status account-01
 sudo ./rbs ip account-01
 ```
 
+The first start builds a Debian 13 image containing Google Chrome Stable and Xpra.
+
 ## 5. Connect with Xpra
-
-By default the generated account binds Xpra to VM loopback only.
-
-Print the connection instructions:
 
 ```bash
 sudo ./rbs connect account-01
 ```
 
-From the client computer, create the SSH tunnel shown by the command, for example:
+With the default loopback binding, create an SSH tunnel from your workstation:
 
 ```bash
 ssh -N -L 14500:127.0.0.1:14500 USER@BROWSER_VM
 ```
 
-Then attach with the native Xpra client:
+Then attach:
 
 ```bash
 xpra attach tcp://127.0.0.1:14500/
 ```
 
-Xpra prompts for the password. On the VM it can be displayed explicitly with:
+Retrieve the account password on the VM only when needed:
 
 ```bash
 sudo ./rbs password account-01
 ```
 
-Xpra installers for macOS, Windows, and Linux are available from the upstream project: <https://xpra.org/>.
+If you intentionally bind Xpra to a management-LAN address, use a trusted network. Do not expose the plain Xpra TCP listener directly to the public Internet.
 
-### Direct management-LAN access
+## Multiple accounts
 
-If an SSH tunnel is inconvenient and the VM has a trusted management-only interface, edit the account's `account.env` and change:
-
-```dotenv
-XPRA_BIND_IP=127.0.0.1
+```bash
+sudo ./rbs create account-02
+sudo ./rbs up account-02
 ```
 
-to that specific management IP.
+Each account currently receives:
 
-Do not use `0.0.0.0` unless you have independently secured the host/network path. Plain TCP is not the preferred way to expose Xpra across an untrusted network.
+- a separate Compose project;
+- a separate Gluetun container and network namespace;
+- a separate WireGuard client configuration;
+- a separate Chrome profile volume;
+- a separate Xpra password and host port.
+
+Multiple accounts may use **the same external WireGuard server/public exit IP** while using separate WireGuard peer keys. This preserves per-account tunnel state while sharing the same server egress IP.
+
+Using the exact same WireGuard client key/config simultaneously from two independent Gluetun containers is not recommended: WireGuard associates one peer public key with its latest observed endpoint, so concurrent copies can cause endpoint roaming/flapping. Sharing one single Gluetun namespace between multiple browsers is technically possible, but is not implemented in v1 and reduces network isolation between those browser identities.
+
+## Verify fail-closed behavior
+
+The CI integration test performs this automatically with disposable keys:
+
+1. establish a real WireGuard handshake;
+2. verify Internet access through the WireGuard server;
+3. stop the server endpoint while leaving Gluetun/probe running;
+4. verify repeated Internet requests fail;
+5. verify the probe still shares the Gluetun network namespace and has no independent Docker network.
+
+For a production deployment, also verify the expected exit IP and DNS/WebRTC behavior before using a sensitive browser identity.
 
 ## Daily commands
 
@@ -179,76 +202,40 @@ sudo ./rbs down account-01
 sudo ./rbs up account-01
 ```
 
-`down` preserves the browser profile volume. A future destructive delete/backup workflow should be explicit rather than hidden behind `down`.
-
-## Multiple accounts
-
-Create another identity:
-
-```bash
-sudo ./rbs create account-02
-sudo ./rbs up account-02
-```
-
-`create` chooses the first unused Xpra host port in `14500-14599`. Each account gets:
-
-- separate Compose project
-- separate Gluetun container
-- separate WireGuard configuration
-- separate Xpra password
-- separate persistent Chromium volume
-- separate Xpra host port
-
-## Verify the fail-closed behavior
-
-First record the VPN IP:
-
-```bash
-sudo ./rbs ip account-01
-```
-
-Then deliberately make the WireGuard peer unavailable (for example in a controlled test environment, stop the peer or temporarily provide an unreachable endpoint) and confirm:
-
-1. the Chromium page can no longer reach the Internet;
-2. it does not fall back to the Debian VM's public IP;
-3. the Xpra session is still reachable through its management port;
-4. restoring the VPN restores browser connectivity.
-
-Do this test before trusting a new deployment with a sensitive identity.
+`down` preserves the account's Chrome profile volume.
 
 ## Repository layout
 
 ```text
 .
 ├── browser/
-│   ├── Dockerfile
-│   ├── entrypoint.sh
-│   └── start-browser.sh
 ├── config/
-│   └── wireguard.example.conf
 ├── docs/
-│   └── security.md
 ├── scripts/
-│   └── bootstrap-debian.sh
+│   ├── bootstrap-debian.sh
+│   ├── install-seccomp-profile.sh
+│   └── install-wireguard-server.sh
 ├── tests/
-│   └── static.sh
+│   ├── integration/
+│   ├── static.sh
+│   └── wireguard-server-static.sh
 ├── compose.yaml
-├── rbs
-└── .env.account.example
+└── rbs
 ```
 
 ## What this project is not
 
-This project isolates persistent browser data and network routing. It is **not an anti-detect browser** and does not promise that two identities have unrelated browser fingerprints. Hardware, rendering, fonts, timezone, browser version, and other signals may still correlate sessions.
+This project isolates persistent browser data and network routing. It is **not an anti-detect browser** and does not promise unrelated browser fingerprints. Fonts, rendering, screen geometry, timezone, browser version, hardware signals, and other attributes may still correlate sessions.
 
-It also does not protect against a malicious Docker administrator or a compromised Debian root account; those actors control the containers and their stored browser data.
+It also does not protect against a malicious Docker administrator or a compromised Debian root account.
 
 ## Upstream components
 
+- [Google Chrome](https://www.google.com/chrome/) — default browser
 - [Xpra](https://github.com/Xpra-org/xpra) — persistent remote applications / seamless remote GUI
 - [Gluetun](https://github.com/qdm12/gluetun) — VPN container and fail-closed firewall
-- [Docker Compose](https://docs.docker.com/compose/) — per-account service orchestration
-- [Chromium](https://www.chromium.org/) — browser
+- [WireGuard](https://www.wireguard.com/) — encrypted tunnel
+- [Docker Compose](https://docs.docker.com/compose/) — per-account orchestration
 
 ## License
 
