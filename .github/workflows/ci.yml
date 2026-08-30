@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 # This repository is public. Never execute fork-controlled pull-request code on
 # a persistent self-hosted runner. Fork PRs are intentionally skipped; a
 # maintainer can review the patch and test it from a trusted branch instead.
@@ -54,7 +58,7 @@ jobs:
           mkdir -p state/accounts/example
           cp config/wireguard.example.conf state/accounts/example/wireguard.conf
           printf '%s' 'ci-only-password' > state/accounts/example/xpra-password
-          seccomp_profile="$(./scripts/install-seccomp-profile.sh)"
+          seccomp_profile="$(bash ./scripts/install-seccomp-profile.sh)"
           ACCOUNT_DIR="$PWD/state/accounts/example" \
             SECCOMP_PROFILE="$seccomp_profile" \
             docker compose --env-file .env.account.example config >/dev/null
@@ -78,7 +82,7 @@ jobs:
       - name: Smoke test Xpra and Chromium startup
         run: |
           password_file="$(mktemp)"
-          seccomp_profile="$(./scripts/install-seccomp-profile.sh)"
+          seccomp_profile="$(bash ./scripts/install-seccomp-profile.sh)"
           printf '%s' 'ci-only-password' > "$password_file"
           chmod 0600 "$password_file"
 
