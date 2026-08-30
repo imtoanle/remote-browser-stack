@@ -18,6 +18,7 @@ required=(
   config/wireguard.example.conf
   rbs
   scripts/bootstrap-debian.sh
+  scripts/install-seccomp-profile.sh
 )
 
 for path in "${required[@]}"; do
@@ -29,6 +30,8 @@ grep -Eq "network_mode:[[:space:]]*[\"']?service:vpn" compose.yaml || fail 'brow
 ! grep -Eq 'privileged:[[:space:]]*true' compose.yaml || fail 'privileged containers are forbidden'
 ! grep -q 'SYS_ADMIN' compose.yaml || fail 'SYS_ADMIN is forbidden; Chromium must use its user-namespace sandbox'
 grep -q 'no-new-privileges:true' compose.yaml || fail 'browser must use no-new-privileges with the user-namespace sandbox'
+grep -Fq 'seccomp=${SECCOMP_PROFILE}' compose.yaml || fail 'browser must use the pinned Chromium seccomp profile'
+! grep -R --line-number -E 'seccomp[=:][[:space:]]*unconfined' compose.yaml .github scripts rbs || fail 'unconfined seccomp is forbidden'
 grep -q 'FIREWALL_INPUT_PORTS' compose.yaml || fail 'Gluetun Xpra input firewall allowance is required'
 grep -q '127.0.0.1' .env.account.example || fail 'Xpra sample bind must default to loopback'
 grep -q 'state/' .gitignore || fail 'runtime state must be ignored'
@@ -36,11 +39,18 @@ grep -q 'state/' .gitignore || fail 'runtime state must be ignored'
 grep -q -- '--disable-setuid-sandbox' browser/start-browser.sh || fail 'Chromium must use the unprivileged user-namespace sandbox instead of the SUID helper'
 grep -Eq '^[[:space:]]+xpra-x11[[:space:]]*\\?$' browser/Dockerfile || fail 'xpra-x11 is required for Xpra seamless mode'
 
+grep -q 'ae935a43d9e376e4759548f6b3c6905c7b282333' scripts/install-seccomp-profile.sh \
+  || fail 'Chromium seccomp profile source must be pinned to the reviewed Playwright commit'
+for syscall in clone setns unshare; do
+  grep -q "$syscall" scripts/install-seccomp-profile.sh || fail "seccomp installer must verify syscall: $syscall"
+done
+
 grep -q "case \"\$command\" in" rbs || fail 'rbs command dispatcher missing'
 for command in create up down logs status ip connect doctor; do
   grep -Eq "(^|[|[:space:]])${command}([)|[:space:]])" rbs || fail "rbs command missing: $command"
 done
 grep -q 'PLACEHOLDER_PRIVATE_KEY' rbs || fail 'rbs must reject the example private key'
+grep -q 'ensure_seccomp_profile' rbs || fail 'rbs up must provision the Chromium seccomp profile'
 
 grep -q 'VERSION_CODENAME' scripts/bootstrap-debian.sh || fail 'bootstrap must validate Debian codename'
 grep -q 'download.docker.com/linux/debian' scripts/bootstrap-debian.sh || fail 'bootstrap must use Docker Debian repository'
