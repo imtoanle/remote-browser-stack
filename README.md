@@ -149,9 +149,9 @@ sudo ./rbs status account-01
 sudo ./rbs ip account-01
 ```
 
-The first start builds a Debian 13 image containing Google Chrome Stable and Xpra. Xpra uses the Xorg dummy driver rather than Xvfb so the virtual display can maintain correct hardware DPI during client resize; CI verifies the display reports 96x96 DPI.
+The first start builds a Debian 13 image containing Google Chrome Stable and Xpra. Xpra uses the Xorg dummy driver rather than Xvfb so the virtual display can maintain correct hardware DPI during client resize; CI verifies the Xdummy/Xpra configuration and browser startup path.
 
-The Chrome profile is persistent. Normal Xpra detach/reconnect leaves Chrome and its open tabs running. If Chrome or the container itself restarts, Chrome uses `--restore-last-session` to restore tabs from the persisted profile. When you only want to disconnect, detach or quit the Xpra client instead of closing the forwarded Chrome window.
+The Chrome profile is persistent. Normal Xpra detach/reconnect leaves Chrome and its open tabs running. If Chrome or the container itself restarts, Chrome uses `--restore-last-session` to restore tabs from the persisted profile. New accounts leave `START_URL` empty by default so restoring a session does not add a blank tab; `./rbs up` also migrates the older generated `START_URL=about:blank` default to empty.
 
 ## 5. Connect with Xpra from the LAN
 
@@ -165,13 +165,16 @@ New accounts default to:
 
 ```env
 XPRA_BIND_IP=0.0.0.0
+START_URL=
 ```
 
 From your workstation on the trusted LAN, connect to the Debian VM's LAN IP and the account-specific Xpra port:
 
 ```bash
-xpra attach tcp://192.168.1.50:14500/
+xpra attach --window-close=disconnect tcp://192.168.1.50:14500/
 ```
+
+`--window-close=disconnect` is intentional: closing the forwarded Chrome window disconnects the Xpra client instead of forwarding a close request to the remote Chrome process. This keeps the browser and its tabs alive for the next attach. A normal client disconnect or client application quit should likewise leave the remote application running; use `sudo ./rbs down account-01` when you actually want to stop the remote stack.
 
 Xpra prompts for the account password. Retrieve it on the VM only when needed:
 
@@ -237,7 +240,8 @@ sudo ./rbs up account-01
 │   ├── add-wireguard-peer.sh
 │   ├── bootstrap-debian.sh
 │   ├── install-seccomp-profile.sh
-│   └── install-wireguard-server.sh
+│   ├── install-wireguard-server.sh
+│   └── add-wireguard-peer.sh
 ├── tests/
 │   ├── integration/
 │   ├── add-wireguard-peer-static.sh
@@ -258,9 +262,3 @@ It also does not protect against a malicious Docker administrator or a compromis
 - [Google Chrome](https://www.google.com/chrome/) — default browser
 - [Xpra](https://github.com/Xpra-org/xpra) — persistent remote applications / seamless remote GUI
 - [Gluetun](https://github.com/qdm12/gluetun) — VPN container and fail-closed firewall
-- [WireGuard](https://www.wireguard.com/) — encrypted tunnel
-- [Docker Compose](https://docs.docker.com/compose/) — per-account orchestration
-
-## License
-
-MIT. See [LICENSE](LICENSE).
