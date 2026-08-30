@@ -18,6 +18,7 @@ RUN apt-get update \
       fonts-noto-color-emoji \
       xauth \
       xpra \
+      xpra-x11 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --create-home --uid 1000 --shell /bin/bash browser \
