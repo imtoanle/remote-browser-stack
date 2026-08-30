@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Shell syntax
+        run: |
+          bash -n tests/static.sh
+          for script in rbs scripts/bootstrap-debian.sh browser/entrypoint.sh; do
+            if [[ -f "$script" ]]; then bash -n "$script"; fi
+          done
+
+      - name: ShellCheck
+        run: |
+          files=(tests/static.sh)
+          for script in rbs scripts/bootstrap-debian.sh browser/entrypoint.sh; do
+            if [[ -f "$script" ]]; then files+=("$script"); fi
+          done
+          shellcheck "${files[@]}"
+
+      - name: Static security contract
+        run: bash tests/static.sh
+
+      - name: Render Compose configuration
+        run: |
+          mkdir -p state/accounts/ci
+          cp config/wireguard.example.conf state/accounts/ci/wireguard.conf
+          printf '%s' 'ci-only-password' > state/accounts/ci/xpra-password
+          docker compose --env-file .env.account.example config >/dev/null
+
+  build-browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build browser image
+        run: docker build --pull browser
