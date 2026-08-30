@@ -58,6 +58,8 @@ grep -q '/etc/xpra/xorg.conf' browser/entrypoint.sh || fail 'Xdummy must use the
 grep -Eq '^[[:space:]]+google-chrome-stable[[:space:]]*\\?$' browser/Dockerfile || fail 'browser image must install Google Chrome Stable'
 ! grep -Eq '^[[:space:]]+chromium[[:space:]]*\\?$' browser/Dockerfile || fail 'Debian Chromium package must not be the default browser'
 grep -q 'google-chrome-stable' browser/start-browser.sh || fail 'browser launcher must execute Google Chrome Stable'
+grep -q -- '--restore-last-session' browser/start-browser.sh || fail 'Chrome must restore the previous tab session after a browser/container restart'
+! grep -Fq '"${START_URL:-about:blank}"' browser/start-browser.sh || fail 'Chrome launcher must not force a blank startup tab when START_URL is unset'
 grep -q 'dl.google.com/linux/chrome/deb' browser/Dockerfile || fail 'Chrome must come from the official Google Debian repository'
 grep -Eq '^[[:space:]]+xpra-x11[[:space:]]*\\?$' browser/Dockerfile || fail 'xpra-x11 is required for Xpra seamless mode'
 grep -Eq '^[[:space:]]+xserver-xorg-video-dummy[[:space:]]*\\?$' browser/Dockerfile || fail 'Xdummy driver is required for correct dynamic hardware DPI'
