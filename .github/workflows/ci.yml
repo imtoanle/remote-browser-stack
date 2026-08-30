@@ -169,11 +169,10 @@ jobs:
               resolution="$(docker exec -u 0 rbs-browser-smoke bash -c '
                 set -e
                 xorg_pid=""
-                for file in /proc/[0-9]*/cmdline; do
-                  argv0="$(tr "\0" "\n" < "$file" 2>/dev/null | head -n1)"
-                  if [[ "$argv0" == "/usr/lib/xorg/Xorg" || "$argv0" == "/usr/bin/Xorg" ]]; then
-                    xorg_pid="${file#/proc/}"
-                    xorg_pid="${xorg_pid%/cmdline}"
+                for comm in /proc/[0-9]*/comm; do
+                  if [[ "$(cat "$comm" 2>/dev/null)" == "Xorg" ]]; then
+                    xorg_pid="${comm#/proc/}"
+                    xorg_pid="${xorg_pid%/comm}"
                     break
                   fi
                 done
