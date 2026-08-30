@@ -30,6 +30,7 @@ grep -q 'FIREWALL_INPUT_PORTS' compose.yaml || fail 'Gluetun Xpra input firewall
 grep -q '127.0.0.1' .env.account.example || fail 'Xpra sample bind must default to loopback'
 grep -q 'state/' .gitignore || fail 'runtime state must be ignored'
 ! grep -R --line-number --fixed-strings -- '--no-sandbox' browser compose.yaml rbs || fail 'Chromium sandbox must stay enabled'
+grep -Eq '^[[:space:]]+chromium-sandbox[[:space:]]*\\?$' browser/Dockerfile || fail 'Debian Chromium sandbox package is required'
 grep -Eq '^[[:space:]]+xpra-x11[[:space:]]*\\?$' browser/Dockerfile || fail 'xpra-x11 is required for Xpra seamless mode'
 
 grep -q "case \"\$command\" in" rbs || fail 'rbs command dispatcher missing'
