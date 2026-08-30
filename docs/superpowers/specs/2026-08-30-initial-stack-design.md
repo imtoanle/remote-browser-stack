@@ -54,7 +54,9 @@ Plain Xpra TCP must not be published on every host interface by default.
 
 ## Browser container
 
-The browser image is based on Debian 13 (Trixie), installs Chromium from Debian security repositories, and installs Xpra stable packages from Xpra's signed repository. Chromium runs as an unprivileged `browser` user and retains its sandbox; `--no-sandbox` is forbidden.
+The browser image is based on Debian 13 (Trixie), installs Chromium plus Debian's `chromium-sandbox`, and installs Xpra stable plus `xpra-x11` from Xpra's signed repository. Chromium runs as an unprivileged `browser` user and retains its sandbox; `--no-sandbox` is forbidden.
+
+The container drops all Docker capabilities. Docker's `no-new-privileges` option is deliberately not used because Debian Chromium's root-owned setuid sandbox helper must perform its privilege transition to establish Linux namespaces before dropping privileges again. CI guards this compatibility requirement and smoke-tests real Chromium startup.
 
 Xpra runs in seamless mode and starts Chromium as its child. Authentication uses an Xpra password file mounted as a Docker secret rather than an environment variable.
 
@@ -69,6 +71,8 @@ Xpra runs in seamless mode and starts Chromium as its child. Authentication uses
 7. Xpra binds to loopback by default.
 8. Real WireGuard configs, Xpra passwords, and browser state MUST be ignored by Git.
 9. Chromium MUST NOT be launched with `--no-sandbox`.
+10. The browser image MUST include `chromium-sandbox` and `xpra-x11` explicitly when using `--no-install-recommends`.
+11. `no-new-privileges` MUST NOT be applied to the browser container because it breaks Debian's setuid Chromium sandbox helper.
 
 ## Operator workflow
 
@@ -88,14 +92,14 @@ The repository exposes a single `./rbs` command:
 
 ## Verification
 
-CI performs three classes of checks:
+CI performs four classes of checks:
 
 1. Shell syntax and ShellCheck for repository scripts.
 2. Static security invariants for Compose and browser launch configuration.
 3. `docker compose config` rendering with synthetic non-secret account data.
-4. Browser image build to catch package/repository breakage.
+4. Browser image build plus an Xpra/Chromium runtime smoke test under the production browser capability policy.
 
-Runtime verification is provided by `./rbs ip <account>`, which queries a public IP endpoint from the shared VPN namespace. Operators should also test the failure case by stopping or invalidating the tunnel and confirming Internet access fails while the Xpra session remains reachable.
+Runtime VPN verification is provided by `./rbs ip <account>`, which queries a public IP endpoint from the shared VPN namespace. Operators should also test the failure case by stopping or invalidating the tunnel and confirming Internet access fails while the Xpra session remains reachable.
 
 ## Public repository safety
 
