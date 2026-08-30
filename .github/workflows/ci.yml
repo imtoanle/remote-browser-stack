@@ -1,0 +1,180 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+# This repository is public. Never execute fork-controlled pull-request code on
+# a persistent self-hosted runner. Fork PRs are intentionally skipped; a
+# maintainer can review the patch and test it from a trusted branch instead.
+
+jobs:
+  validate:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Verify runner prerequisites
+        run: |
+          set -euo pipefail
+          command -v docker >/dev/null || { echo 'docker is required on the self-hosted runner' >&2; exit 1; }
+          docker compose version >/dev/null || { echo 'docker compose plugin is required on the self-hosted runner' >&2; exit 1; }
+          for command in curl jq shellcheck; do
+            command -v "$command" >/dev/null || { echo "$command is required on the self-hosted runner" >&2; exit 1; }
+          done
+
+      - name: Shell syntax
+        run: |
+          scripts=(
+            tests/static.sh
+            tests/wireguard-server-static.sh
+            tests/add-wireguard-peer-static.sh
+            tests/integration/wireguard-killswitch.sh
+            rbs
+            scripts/bootstrap-debian.sh
+            scripts/install-seccomp-profile.sh
+            scripts/install-wireguard-server.sh
+            scripts/add-wireguard-peer.sh
+            browser/entrypoint.sh
+            browser/start-browser.sh
+          )
+          for script in "${scripts[@]}"; do bash -n "$script"; done
+
+      - name: ShellCheck
+        run: |
+          shellcheck \
+            tests/static.sh \
+            tests/wireguard-server-static.sh \
+            tests/add-wireguard-peer-static.sh \
+            tests/integration/wireguard-killswitch.sh \
+            rbs \
+            scripts/bootstrap-debian.sh \
+            scripts/install-seccomp-profile.sh \
+            scripts/install-wireguard-server.sh \
+            scripts/add-wireguard-peer.sh \
+            browser/entrypoint.sh \
+            browser/start-browser.sh
+
+      - name: Static security contract
+        run: bash tests/static.sh
+
+      - name: Render Compose configuration
+        run: |
+          mkdir -p state/accounts/example
+          cp config/wireguard.example.conf state/accounts/example/wireguard.conf
+          printf '%s' 'ci-only-password' > state/accounts/example/xpra-password
+          seccomp_profile="$(bash ./scripts/install-seccomp-profile.sh)"
+          ACCOUNT_DIR="$PWD/state/accounts/example" \
+            SECCOMP_PROFILE="$seccomp_profile" \
+            docker compose --env-file .env.account.example config >/dev/null
+
+  build-browser:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Verify runner prerequisites
+        run: |
+          set -euo pipefail
+          command -v docker >/dev/null || { echo 'docker is required on the self-hosted runner' >&2; exit 1; }
+          for command in curl jq; do
+            command -v "$command" >/dev/null || { echo "$command is required on the self-hosted runner" >&2; exit 1; }
+          done
+
+      - name: Build browser image
+        run: docker build --pull -t remote-browser-stack:ci browser
+
+      - name: Diagnose sandbox host policy
+        run: |
+          set -euo pipefail
+          echo 'Docker security options:'
+          docker info --format '{{json .SecurityOptions}}'
+          for path in \
+            /proc/sys/kernel/unprivileged_userns_clone \
+            /proc/sys/user/max_user_namespaces \
+            /proc/sys/kernel/apparmor_restrict_unprivileged_userns; do
+            if [[ -r "$path" ]]; then
+              printf '%s=' "$path"
+              cat "$path"
+            fi
+          done
+          seccomp_profile="$(bash ./scripts/install-seccomp-profile.sh)"
+          printf 'seccomp-profile=%s\n' "$seccomp_profile"
+          jq -e '.syscalls[] | select(.action == "SCMP_ACT_ALLOW" and (.names | index("unshare")))' "$seccomp_profile" >/dev/null
+
+      - name: Smoke test Xpra and Google Chrome Stable startup
+        run: |
+          password_file="$(mktemp)"
+          seccomp_profile="$(bash ./scripts/install-seccomp-profile.sh)"
+          printf '%s' 'ci-only-password' > "$password_file"
+          chmod 0600 "$password_file"
+
+          cleanup() {
+            docker rm -f rbs-browser-smoke >/dev/null 2>&1 || true
+            rm -f "$password_file"
+          }
+          trap cleanup EXIT
+
+          docker run -d \
+            --name rbs-browser-smoke \
+            --network none \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --security-opt apparmor=unconfined \
+            --security-opt "seccomp=$seccomp_profile" \
+            --shm-size 1g \
+            -e START_URL=about:blank \
+            -v "$password_file:/run/secrets/xpra_password:ro" \
+            remote-browser-stack:ci
+
+          for _ in {1..25}; do
+            if [[ "$(docker inspect -f '{{.State.Running}}' rbs-browser-smoke)" != "true" ]]; then
+              docker logs rbs-browser-smoke
+              exit 1
+            fi
+
+            if docker exec rbs-browser-smoke bash -c '
+              for file in /proc/[0-9]*/cmdline; do
+                tr "\0" " " < "$file" 2>/dev/null | grep -q "google-chrome" && exit 0
+              done
+              exit 1
+            '; then
+              docker exec rbs-browser-smoke google-chrome-stable --version
+              exit 0
+            fi
+
+            sleep 1
+          done
+
+          docker logs rbs-browser-smoke
+          echo 'Google Chrome Stable did not start within the smoke-test window' >&2
+          exit 1
+
+  network-integration:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Verify network test prerequisites
+        run: |
+          set -euo pipefail
+          command -v docker >/dev/null || { echo 'docker is required on the self-hosted runner' >&2; exit 1; }
+          docker info >/dev/null
+          [[ -c /dev/net/tun ]] || { echo '/dev/net/tun is required on the self-hosted runner' >&2; exit 1; }
+
+      - name: Verify Gluetun WireGuard kill switch
+        run: bash tests/integration/wireguard-killswitch.sh
