@@ -47,11 +47,13 @@ The preferred remote transport is an SSH local-forward. If direct LAN binding is
 
 ## Browser sandbox
 
-Chromium runs as a non-root user and the container drops all Linux capabilities. Debian's `chromium-sandbox` package is installed explicitly, and the project intentionally does not pass `--no-sandbox`.
+Chromium runs as a non-root user. The container drops all Docker capabilities and enables `no-new-privileges`.
 
-The browser service intentionally does **not** use Docker's `no-new-privileges` option. Debian Chromium's setuid sandbox helper must temporarily execute with its root-owned SUID privilege to create the browser sandbox namespaces and then drops privileges again. `no-new-privileges` disables that transition and Chromium aborts rather than running without a usable sandbox.
+The browser is launched with `--disable-setuid-sandbox`. This does **not** disable Chromium sandboxing: it disables the legacy SUID helper and makes Chromium use its unprivileged user-namespace sandbox instead. The user-namespace sandbox is Chromium's modern Linux layer-1 sandbox on supported kernels, with Chromium's seccomp-BPF sandbox providing an additional layer.
 
-This exception is limited to the browser's own sandbox bootstrap. The container remains non-root, unprivileged, with all Docker capabilities dropped. CI smoke-tests Chromium under that exact policy so changes that break sandbox startup are detected.
+The project deliberately forbids `--no-sandbox` and deliberately does not grant `SYS_ADMIN` to the browser container. This avoids solving Chromium startup by giving the browser a broad host-level capability.
+
+The target host and Docker policy must permit unprivileged user namespaces. CI starts Chromium with the production policy (`non-root`, `cap_drop: ALL`, `no-new-privileges`) so a configuration that cannot engage the user-namespace sandbox fails the runtime smoke test rather than silently falling back to an unsandboxed browser.
 
 Container isolation is still not a replacement for a VM boundary against kernel/container escapes. The design uses a dedicated Debian VM so a browser compromise is also separated from unrelated Proxmox workloads.
 
@@ -92,9 +94,10 @@ Repeat the failure test after meaningful changes to Docker, Gluetun, WireGuard c
 - removing `network_mode: service:vpn`;
 - adding host networking;
 - enabling privileged containers;
+- granting `SYS_ADMIN` to a container;
 - launching Chromium with `--no-sandbox`;
-- omitting Debian's `chromium-sandbox` package;
-- adding `no-new-privileges`, which prevents the Debian setuid sandbox helper from functioning;
+- removing the explicit `--disable-setuid-sandbox` user-namespace selection;
+- removing `no-new-privileges` from the browser policy;
 - changing the example Xpra bind away from loopback;
 - tracking runtime state;
 - committing a WireGuard-looking private key outside explicitly allowed documentation/example files.
