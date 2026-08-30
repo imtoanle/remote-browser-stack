@@ -154,6 +154,7 @@ jobs:
               exit 1
             '; then
               docker exec rbs-browser-smoke google-chrome-stable --version
+              docker exec rbs-browser-smoke xpra --version
               docker exec rbs-browser-smoke xpra info tcp://127.0.0.1:14500/ \
                 --challenge-handlers=file:filename=/run/secrets/xpra_password \
                 --debug=auth >/dev/null
