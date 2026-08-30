@@ -168,11 +168,11 @@ jobs:
 
               docker exec rbs-browser-smoke bash -c '
                 set -e
-                shopt -s nullglob
-                logs=(/home/browser/.runtime/Xorg.*.log)
-                test "${#logs[@]}" -gt 0
-                grep -q "DUMMY(0)" "${logs[@]}"
-                grep -Eq "DPI set to \\(96, 96\\)" "${logs[@]}"
+                xorg_log="$(find /home/browser /tmp -type f -name "Xorg*.log" -print -quit 2>/dev/null)"
+                test -n "$xorg_log"
+                printf "xorg-log=%s\n" "$xorg_log"
+                grep -q "DUMMY(0)" "$xorg_log"
+                grep -Eq "DPI set to \\(96, 96\\)" "$xorg_log"
               '
               echo 'virtual-display-resolution=96x96 (Xorg dummy log)'
 
