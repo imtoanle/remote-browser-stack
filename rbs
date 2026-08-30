@@ -65,7 +65,7 @@ read_env_value() {
 }
 
 ensure_seccomp_profile() {
-  RBS_SECCOMP_PROFILE="$SECCOMP_PROFILE" "$ROOT_DIR/scripts/install-seccomp-profile.sh" >/dev/null
+  RBS_SECCOMP_PROFILE="$SECCOMP_PROFILE" bash "$ROOT_DIR/scripts/install-seccomp-profile.sh" >/dev/null
   [[ -s "$SECCOMP_PROFILE" ]] || fail "Chromium seccomp profile was not installed: $SECCOMP_PROFILE"
 }
 
