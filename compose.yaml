@@ -41,6 +41,11 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+      # Docker's generated docker-default AppArmor profile blocks Chromium's
+      # unprivileged user-namespace sandbox. Disable only this outer LSM layer
+      # for the browser; capabilities, NNP, seccomp and Chromium's own sandbox
+      # remain enabled. The VPN container keeps Docker's default AppArmor.
+      - apparmor=unconfined
       - "seccomp=${SECCOMP_PROFILE}"
     restart: unless-stopped
 
