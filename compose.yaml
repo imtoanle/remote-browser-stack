@@ -39,8 +39,6 @@ services:
     shm_size: "1gb"
     cap_drop:
       - ALL
-    security_opt:
-      - no-new-privileges:true
     restart: unless-stopped
 
 secrets:
