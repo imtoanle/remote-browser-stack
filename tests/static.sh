@@ -19,6 +19,10 @@ required=(
   rbs
   scripts/bootstrap-debian.sh
   scripts/install-seccomp-profile.sh
+  scripts/install-wireguard-server.sh
+  tests/wireguard-server-static.sh
+  tests/integration/Dockerfile.wireguard-server
+  tests/integration/wireguard-killswitch.sh
 )
 
 for path in "${required[@]}"; do
@@ -69,10 +73,18 @@ grep -q 'docker-compose-plugin' scripts/bootstrap-debian.sh || fail 'bootstrap m
 grep -Eq '^[[:space:]]+jq[[:space:]]*\\?$' scripts/bootstrap-debian.sh || fail 'bootstrap must install jq for seccomp profile generation'
 ! grep -Eqi 'gnome|kde|xfce|lightdm|gdm' scripts/bootstrap-debian.sh || fail 'bootstrap must remain headless'
 
+bash tests/wireguard-server-static.sh >/dev/null || fail 'WireGuard server static contract failed'
+grep -q 'network_mode: service:vpn' docs/superpowers/specs/2026-08-30-chrome-wireguard-integration-design.md || fail 'design must preserve browser-vpn namespace sharing'
+grep -q 'Phase B:' tests/integration/wireguard-killswitch.sh || fail 'kill-switch test must include a tunnel failure phase'
+grep -q 'docker stop.*server' tests/integration/wireguard-killswitch.sh || fail 'kill-switch test must stop the WireGuard server'
+grep -q 'direct fallback leaked' tests/integration/wireguard-killswitch.sh || fail 'kill-switch test must fail on direct fallback'
+
 grep -q '^concurrency:' .github/workflows/ci.yml || fail 'CI must define workflow-level concurrency'
 grep -q 'cancel-in-progress:[[:space:]]*true' .github/workflows/ci.yml || fail 'CI must cancel obsolete runs when a new commit arrives'
 grep -Fq 'bash ./scripts/install-seccomp-profile.sh' .github/workflows/ci.yml \
   || fail 'CI must invoke the seccomp installer through bash'
+grep -q '^  network-integration:' .github/workflows/ci.yml || fail 'CI must run the WireGuard network integration job'
+grep -Fq 'bash tests/integration/wireguard-killswitch.sh' .github/workflows/ci.yml || fail 'CI must execute the kill-switch integration test'
 
 # Guard against accidentally committing common real WireGuard secret assignments.
 while IFS= read -r file; do
