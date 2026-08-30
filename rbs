@@ -1,0 +1,284 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STATE_DIR="${RBS_STATE_DIR:-$ROOT_DIR/state/accounts}"
+COMPOSE_FILE="$ROOT_DIR/compose.yaml"
+command="${1:-help}"
+
+fail() {
+  printf 'Error: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Remote Browser Stack
+
+Usage:
+  ./rbs create <account>
+  ./rbs up <account>
+  ./rbs down <account>
+  ./rbs logs <account>
+  ./rbs status <account>
+  ./rbs ip <account>
+  ./rbs connect <account>
+  ./rbs password <account>
+  ./rbs doctor
+
+Account names may contain lowercase letters, digits, and hyphens only.
+EOF
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || fail "required command not found: $1"
+}
+
+validate_account_name() {
+  local account="$1"
+  [[ "$account" =~ ^[a-z0-9][a-z0-9-]{0,30}$ ]] \
+    || fail "invalid account name '$account' (use lowercase letters, digits, hyphens; max 31 chars)"
+}
+
+account_dir() {
+  printf '%s/%s' "$STATE_DIR" "$1"
+}
+
+account_env() {
+  printf '%s/account.env' "$(account_dir "$1")"
+}
+
+require_account() {
+  local account="$1"
+  validate_account_name "$account"
+  [[ -f "$(account_env "$account")" ]] || fail "account '$account' does not exist; run ./rbs create $account"
+}
+
+read_env_value() {
+  local account="$1"
+  local key="$2"
+  local value
+  value="$(sed -n "s/^${key}=//p" "$(account_env "$account")" | tail -n 1)"
+  [[ -n "$value" ]] || fail "missing $key in $(account_env "$account")"
+  printf '%s' "$value"
+}
+
+compose() {
+  local account="$1"
+  shift
+  local dir env_file
+  dir="$(account_dir "$account")"
+  env_file="$(account_env "$account")"
+  (
+    cd "$ROOT_DIR"
+    ACCOUNT_DIR="$dir" docker compose \
+      --project-name "rbs-$account" \
+      --env-file "$env_file" \
+      -f "$COMPOSE_FILE" \
+      "$@"
+  )
+}
+
+port_in_use() {
+  local port="$1"
+  local env_file
+
+  shopt -s nullglob
+  for env_file in "$STATE_DIR"/*/account.env; do
+    if grep -qx "XPRA_PORT=$port" "$env_file"; then
+      return 0
+    fi
+  done
+
+  if command -v ss >/dev/null 2>&1; then
+    if ss -H -ltn | awk '{print $4}' | grep -Eq "(^|:)$port$"; then
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+next_port() {
+  local port
+  for ((port = 14500; port <= 14599; port++)); do
+    if ! port_in_use "$port"; then
+      printf '%s' "$port"
+      return 0
+    fi
+  done
+  fail 'no free Xpra port found in range 14500-14599'
+}
+
+create_account() {
+  local account="$1"
+  local dir env_file port
+  validate_account_name "$account"
+  require_command openssl
+
+  dir="$(account_dir "$account")"
+  env_file="$dir/account.env"
+  [[ ! -e "$dir" ]] || fail "account '$account' already exists at $dir"
+
+  umask 077
+  mkdir -p "$dir"
+  port="$(next_port)"
+
+  cp "$ROOT_DIR/config/wireguard.example.conf" "$dir/wireguard.conf"
+  openssl rand -hex 24 > "$dir/xpra-password"
+  cat > "$env_file" <<EOF
+ACCOUNT_NAME=$account
+XPRA_BIND_IP=127.0.0.1
+XPRA_PORT=$port
+START_URL=about:blank
+TZ=UTC
+EOF
+  chmod 0600 "$dir/wireguard.conf" "$dir/xpra-password" "$env_file"
+
+  cat <<EOF
+Created account: $account
+Xpra port:      $port
+State:          $dir
+
+Next:
+  1. Replace the WireGuard placeholders in:
+     $dir/wireguard.conf
+  2. Run: ./rbs up $account
+  3. Run: ./rbs connect $account
+EOF
+}
+
+validate_wireguard() {
+  local account="$1"
+  local file
+  file="$(account_dir "$account")/wireguard.conf"
+
+  [[ -s "$file" ]] || fail "missing WireGuard config: $file"
+  ! grep -q 'PLACEHOLDER_PRIVATE_KEY' "$file" || fail 'WireGuard PrivateKey is still a placeholder'
+  ! grep -q 'PLACEHOLDER_SERVER_PUBLIC_KEY' "$file" || fail 'WireGuard server PublicKey is still a placeholder'
+  ! grep -q '198\.51\.100\.1' "$file" || fail 'WireGuard Endpoint is still the documentation example'
+  grep -Eq '^[[:space:]]*PrivateKey[[:space:]]*=' "$file" || fail 'WireGuard config has no PrivateKey'
+  grep -Eq '^[[:space:]]*Endpoint[[:space:]]*=' "$file" || fail 'WireGuard config has no Endpoint'
+  grep -Eq '^[[:space:]]*AllowedIPs[[:space:]]*=.*0\.0\.0\.0/0' "$file" \
+    || fail 'WireGuard AllowedIPs must include 0.0.0.0/0 for fail-closed browser egress'
+  [[ -s "$(account_dir "$account")/xpra-password" ]] || fail 'Xpra password file is missing or empty'
+}
+
+doctor() {
+  local failed=0
+  for cmd in docker openssl ss; do
+    if command -v "$cmd" >/dev/null 2>&1; then
+      printf 'OK   %s\n' "$cmd"
+    else
+      printf 'MISS %s\n' "$cmd"
+      failed=1
+    fi
+  done
+
+  if docker compose version >/dev/null 2>&1; then
+    printf 'OK   docker compose\n'
+  else
+    printf 'MISS docker compose plugin or Docker daemon access\n'
+    failed=1
+  fi
+
+  if [[ -c /dev/net/tun ]]; then
+    printf 'OK   /dev/net/tun\n'
+  else
+    printf 'MISS /dev/net/tun (load the tun kernel module)\n'
+    failed=1
+  fi
+
+  if docker info >/dev/null 2>&1; then
+    printf 'OK   Docker daemon access\n'
+  else
+    printf 'MISS Docker daemon access (use sudo or configure Docker access explicitly)\n'
+    failed=1
+  fi
+
+  return "$failed"
+}
+
+account="${2:-}"
+
+case "$command" in
+  create)
+    [[ -n "$account" ]] || fail 'account name required'
+    create_account "$account"
+    ;;
+  up)
+    [[ -n "$account" ]] || fail 'account name required'
+    require_account "$account"
+    require_command docker
+    validate_wireguard "$account"
+    compose "$account" up -d --build
+    ;;
+  down)
+    [[ -n "$account" ]] || fail 'account name required'
+    require_account "$account"
+    compose "$account" down
+    ;;
+  logs)
+    [[ -n "$account" ]] || fail 'account name required'
+    require_account "$account"
+    compose "$account" logs -f --tail=200
+    ;;
+  status)
+    [[ -n "$account" ]] || fail 'account name required'
+    require_account "$account"
+    compose "$account" ps
+    ;;
+  ip)
+    [[ -n "$account" ]] || fail 'account name required'
+    require_account "$account"
+    vpn_id="$(compose "$account" ps -q vpn)"
+    [[ -n "$vpn_id" ]] || fail "VPN container for '$account' is not running"
+    docker exec "$vpn_id" wget -qO- https://api.ipify.org
+    printf '\n'
+    ;;
+  connect)
+    [[ -n "$account" ]] || fail 'account name required'
+    require_account "$account"
+    bind_ip="$(read_env_value "$account" XPRA_BIND_IP)"
+    port="$(read_env_value "$account" XPRA_PORT)"
+    if [[ "$bind_ip" == "127.0.0.1" ]]; then
+      cat <<EOF
+Xpra is bound to loopback (safe default).
+
+On your client machine:
+  ssh -N -L ${port}:127.0.0.1:${port} USER@BROWSER_VM
+
+Then, in another terminal:
+  xpra attach tcp://127.0.0.1:${port}/
+
+Xpra will prompt for the password. Retrieve it on the VM with:
+  ./rbs password $account
+EOF
+    else
+      cat <<EOF
+Xpra is bound to $bind_ip:$port.
+Connect from a trusted management network with:
+  xpra attach tcp://$bind_ip:$port/
+
+Retrieve the password on the VM with:
+  ./rbs password $account
+EOF
+    fi
+    ;;
+  password)
+    [[ -n "$account" ]] || fail 'account name required'
+    require_account "$account"
+    cat "$(account_dir "$account")/xpra-password"
+    printf '\n'
+    ;;
+  doctor)
+    doctor
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    usage >&2
+    fail "unknown command: $command"
+    ;;
+esac
