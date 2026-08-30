@@ -28,23 +28,27 @@ done
 grep -Eq "network_mode:[[:space:]]*[\"']?service:vpn" compose.yaml || fail 'browser must share vpn network namespace'
 ! grep -Eq "network_mode:[[:space:]]*[\"']?host" compose.yaml || fail 'host networking is forbidden'
 ! grep -Eq 'privileged:[[:space:]]*true' compose.yaml || fail 'privileged containers are forbidden'
-! grep -q 'SYS_ADMIN' compose.yaml || fail 'SYS_ADMIN is forbidden; Chromium must use its user-namespace sandbox'
+! grep -q 'SYS_ADMIN' compose.yaml || fail 'SYS_ADMIN is forbidden; Chrome must use its user-namespace sandbox'
 grep -q 'no-new-privileges:true' compose.yaml || fail 'browser must use no-new-privileges with the user-namespace sandbox'
-grep -q 'apparmor=unconfined' compose.yaml || fail 'browser must bypass docker-default AppArmor so Chromium user namespaces can initialize'
-grep -Fq "seccomp=\${SECCOMP_PROFILE}" compose.yaml || fail 'browser must use the pinned Chromium seccomp profile'
+grep -q 'apparmor=unconfined' compose.yaml || fail 'browser must bypass docker-default AppArmor so Chrome user namespaces can initialize'
+grep -Fq "seccomp=\${SECCOMP_PROFILE}" compose.yaml || fail 'browser must use the pinned Chrome seccomp profile'
 ! grep -R --line-number -E 'seccomp[=:][[:space:]]*unconfined' compose.yaml scripts rbs || fail 'unconfined seccomp is forbidden in production runtime paths'
 grep -q 'FIREWALL_INPUT_PORTS' compose.yaml || fail 'Gluetun Xpra input firewall allowance is required'
 grep -q '127.0.0.1' .env.account.example || fail 'Xpra sample bind must default to loopback'
 grep -q 'state/' .gitignore || fail 'runtime state must be ignored'
-! grep -R --line-number --fixed-strings -- '--no-sandbox' browser compose.yaml rbs || fail 'disabling the Chromium sandbox is forbidden'
-grep -q -- '--disable-setuid-sandbox' browser/start-browser.sh || fail 'Chromium must use the unprivileged user-namespace sandbox instead of the SUID helper'
+! grep -R --line-number --fixed-strings -- '--no-sandbox' browser compose.yaml rbs || fail 'disabling the Chrome sandbox is forbidden'
+grep -q -- '--disable-setuid-sandbox' browser/start-browser.sh || fail 'Chrome must use the unprivileged user-namespace sandbox instead of the SUID helper'
+grep -Eq '^[[:space:]]+google-chrome-stable[[:space:]]*\\?$' browser/Dockerfile || fail 'browser image must install Google Chrome Stable'
+! grep -Eq '^[[:space:]]+chromium[[:space:]]*\\?$' browser/Dockerfile || fail 'Debian Chromium package must not be the default browser'
+grep -q 'google-chrome-stable' browser/start-browser.sh || fail 'browser launcher must execute Google Chrome Stable'
+grep -q 'dl.google.com/linux/chrome/deb' browser/Dockerfile || fail 'Chrome must come from the official Google Debian repository'
 grep -Eq '^[[:space:]]+xpra-x11[[:space:]]*\\?$' browser/Dockerfile || fail 'xpra-x11 is required for Xpra seamless mode'
 
 grep -q '3c28324314729dbade8287e868eef6338c42807a' scripts/install-seccomp-profile.sh \
-  || fail 'Chromium seccomp base must be pinned to the reviewed Moby profile commit'
+  || fail 'Chrome seccomp base must be pinned to the reviewed Moby profile commit'
 grep -q 'moby/profiles' scripts/install-seccomp-profile.sh || fail 'seccomp installer must use the current Moby profile as its base'
 for syscall in clone setns unshare chroot; do
-  grep -q "$syscall" scripts/install-seccomp-profile.sh || fail "seccomp installer must allow Chromium sandbox syscall: $syscall"
+  grep -q "$syscall" scripts/install-seccomp-profile.sh || fail "seccomp installer must allow Chrome sandbox syscall: $syscall"
 done
 for syscall in clone3 openat2 pidfd_open; do
   grep -q "$syscall" scripts/install-seccomp-profile.sh || fail "seccomp installer must verify modern profile syscall: $syscall"
@@ -55,7 +59,7 @@ for command in create up down logs status ip connect doctor; do
   grep -Eq "(^|[|[:space:]])${command}([)|[:space:]])" rbs || fail "rbs command missing: $command"
 done
 grep -q 'PLACEHOLDER_PRIVATE_KEY' rbs || fail 'rbs must reject the example private key'
-grep -q 'ensure_seccomp_profile' rbs || fail 'rbs up must provision the Chromium seccomp profile'
+grep -q 'ensure_seccomp_profile' rbs || fail 'rbs up must provision the Chrome seccomp profile'
 grep -Fq "bash \"\$ROOT_DIR/scripts/install-seccomp-profile.sh\"" rbs \
   || fail 'rbs must invoke the seccomp installer through bash so checkout mode bits cannot break startup'
 
