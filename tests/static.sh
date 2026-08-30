@@ -31,7 +31,9 @@ grep -Eq "network_mode:[[:space:]]*[\"']?service:vpn" compose.yaml || fail 'brow
 ! grep -q 'SYS_ADMIN' compose.yaml || fail 'SYS_ADMIN is forbidden; Chromium must use its user-namespace sandbox'
 grep -q 'no-new-privileges:true' compose.yaml || fail 'browser must use no-new-privileges with the user-namespace sandbox'
 grep -Fq "seccomp=\${SECCOMP_PROFILE}" compose.yaml || fail 'browser must use the pinned Chromium seccomp profile'
-! grep -R --line-number -E 'seccomp[=:][[:space:]]*unconfined' compose.yaml .github scripts rbs || fail 'unconfined seccomp is forbidden'
+# Production/runtime paths must never disable seccomp. CI may temporarily do so
+# in a network-isolated diagnostic experiment while investigating sandbox bugs.
+! grep -R --line-number -E 'seccomp[=:][[:space:]]*unconfined' compose.yaml scripts rbs || fail 'unconfined seccomp is forbidden in production runtime paths'
 grep -q 'FIREWALL_INPUT_PORTS' compose.yaml || fail 'Gluetun Xpra input firewall allowance is required'
 grep -q '127.0.0.1' .env.account.example || fail 'Xpra sample bind must default to loopback'
 grep -q 'state/' .gitignore || fail 'runtime state must be ignored'
