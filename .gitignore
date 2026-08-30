@@ -1,0 +1,11 @@
+# Runtime account credentials and state
+state/
+
+# Local overrides
+.env
+*.local
+
+# OS/editor files
+.DS_Store
+.idea/
+.vscode/

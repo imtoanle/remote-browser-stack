@@ -20,14 +20,14 @@ jobs:
       - name: Shell syntax
         run: |
           bash -n tests/static.sh
-          for script in rbs scripts/bootstrap-debian.sh browser/entrypoint.sh; do
+          for script in rbs scripts/bootstrap-debian.sh browser/entrypoint.sh browser/start-browser.sh; do
             if [[ -f "$script" ]]; then bash -n "$script"; fi
           done
 
       - name: ShellCheck
         run: |
           files=(tests/static.sh)
-          for script in rbs scripts/bootstrap-debian.sh browser/entrypoint.sh; do
+          for script in rbs scripts/bootstrap-debian.sh browser/entrypoint.sh browser/start-browser.sh; do
             if [[ -f "$script" ]]; then files+=("$script"); fi
           done
           shellcheck "${files[@]}"
@@ -37,9 +37,9 @@ jobs:
 
       - name: Render Compose configuration
         run: |
-          mkdir -p state/accounts/ci
-          cp config/wireguard.example.conf state/accounts/ci/wireguard.conf
-          printf '%s' 'ci-only-password' > state/accounts/ci/xpra-password
+          mkdir -p state/accounts/example
+          cp config/wireguard.example.conf state/accounts/example/wireguard.conf
+          printf '%s' 'ci-only-password' > state/accounts/example/xpra-password
           docker compose --env-file .env.account.example config >/dev/null
 
   build-browser:
