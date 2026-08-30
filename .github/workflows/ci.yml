@@ -177,8 +177,9 @@ jobs:
                   fi
                 done
                 test -n "$xorg_pid"
-                xauthority="$(tr "\0" "\n" < "/proc/$xorg_pid/environ" | sed -n "s/^XAUTHORITY=//p")"
+                xauthority="$(tr "\0" "\n" < "/proc/$xorg_pid/cmdline" | awk '\''found { print; exit } $0 == "-auth" { found=1 }'\'')"
                 test -n "$xauthority"
+                test -r "$xauthority"
                 XAUTHORITY="$xauthority" xdpyinfo -display :100 | awk "/resolution:/{print \$2; exit}"
               ')"
               printf 'virtual-display-resolution=%s\n' "$resolution"
