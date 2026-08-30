@@ -38,11 +38,13 @@ jobs:
           scripts=(
             tests/static.sh
             tests/wireguard-server-static.sh
+            tests/add-wireguard-peer-static.sh
             tests/integration/wireguard-killswitch.sh
             rbs
             scripts/bootstrap-debian.sh
             scripts/install-seccomp-profile.sh
             scripts/install-wireguard-server.sh
+            scripts/add-wireguard-peer.sh
             browser/entrypoint.sh
             browser/start-browser.sh
           )
@@ -53,11 +55,13 @@ jobs:
           shellcheck \
             tests/static.sh \
             tests/wireguard-server-static.sh \
+            tests/add-wireguard-peer-static.sh \
             tests/integration/wireguard-killswitch.sh \
             rbs \
             scripts/bootstrap-debian.sh \
             scripts/install-seccomp-profile.sh \
             scripts/install-wireguard-server.sh \
+            scripts/add-wireguard-peer.sh \
             browser/entrypoint.sh \
             browser/start-browser.sh
 
