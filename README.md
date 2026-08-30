@@ -151,6 +151,8 @@ sudo ./rbs ip account-01
 
 The first start builds a Debian 13 image containing Google Chrome Stable and Xpra. Xpra uses the Xorg dummy driver rather than Xvfb so the virtual display can maintain correct hardware DPI during client resize; CI verifies the display reports 96x96 DPI.
 
+The Chrome profile is persistent. Normal Xpra detach/reconnect leaves Chrome and its open tabs running. If Chrome or the container itself restarts, Chrome uses `--restore-last-session` to restore tabs from the persisted profile. When you only want to disconnect, detach or quit the Xpra client instead of closing the forwarded Chrome window.
+
 ## 5. Connect with Xpra from the LAN
 
 Run this helper **on the Debian browser VM**:
@@ -235,6 +237,7 @@ sudo ./rbs up account-01
 │   ├── add-wireguard-peer.sh
 │   ├── bootstrap-debian.sh
 │   ├── install-seccomp-profile.sh
+│   ├── install-wireguard-server.sh
 │   └── install-wireguard-server.sh
 ├── tests/
 │   ├── integration/
