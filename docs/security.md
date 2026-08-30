@@ -9,13 +9,15 @@ Trusted:
 - the Debian/Proxmox administrator;
 - Docker Engine on the VM;
 - the chosen WireGuard endpoint/provider;
+- the trusted LAN used to reach Xpra;
 - the client workstation used to attach to Xpra.
 
 Not assumed trustworthy:
 
 - websites loaded in Google Chrome;
 - the normal WAN path of the Debian VM as a browser egress path;
-- other browser identities running on the same VM.
+- other browser identities running on the same VM;
+- the public Internet/WAN as an Xpra management transport.
 
 A root compromise of the VM or Docker daemon is outside this isolation boundary. Docker administrators can inspect containers, volumes, and runtime secrets.
 
@@ -40,10 +42,12 @@ Because browser and VPN share a namespace, Xpra's TCP listener also exists insid
 The host-side mapping defaults to:
 
 ```text
-127.0.0.1:<account-port> -> namespace:14500
+0.0.0.0:<account-port> -> namespace:14500
 ```
 
-This keeps management reachable without giving Chrome an independent network path. The preferred remote transport is an SSH local-forward. If direct LAN binding is configured, use only a trusted management network.
+This makes Xpra directly reachable through the Debian VM's LAN addresses while preserving the browser's lack of an independent network path. Xpra password authentication is still required.
+
+This default assumes the VM is attached only to a **trusted LAN / management network** for Xpra access. Do not forward the Xpra port from a router, map it onto a public interface, or otherwise expose the plain TCP listener to the Internet. For access across an untrusted network, override `XPRA_BIND_IP=127.0.0.1` and use SSH or another encrypted tunnel.
 
 ## Browser sandbox
 
@@ -87,11 +91,12 @@ Before using a new identity:
 
 1. `./rbs status <account>` shows the services running and VPN healthy.
 2. `./rbs ip <account>` returns the expected VPN exit address rather than the VM WAN address.
-3. In Chrome, verify IP/DNS/WebRTC behavior with a reputable leak-test site.
-4. Break the VPN connection intentionally.
-5. Confirm existing and new browser requests fail instead of using the VM WAN IP.
-6. Confirm Xpra remains accessible through the intended management path.
-7. Restore WireGuard and confirm connectivity returns through the expected exit.
+3. Confirm the Xpra port is reachable only from the intended trusted LAN/management network.
+4. In Chrome, verify IP/DNS/WebRTC behavior with a reputable leak-test site.
+5. Break the VPN connection intentionally.
+6. Confirm existing and new browser requests fail instead of using the VM WAN IP.
+7. Confirm Xpra remains accessible through the intended management path.
+8. Restore WireGuard and confirm connectivity returns through the expected exit.
 
 Repeat the failure test after meaningful changes to Docker, Gluetun, WireGuard configuration, kernel security policy, or Compose networking.
 
@@ -104,6 +109,7 @@ CI checks include:
 - synthetic Compose rendering;
 - Google Chrome Stable + Xpra runtime smoke testing under the production sandbox policy;
 - a real ephemeral WireGuard/Gluetun integration test that verifies fail-closed behavior;
-- guards against host networking, privileged browser containers, `SYS_ADMIN`, `--no-sandbox`, `seccomp=unconfined`, non-loopback sample management binding, and committed WireGuard-looking private keys.
+- guards against host networking, privileged browser containers, `SYS_ADMIN`, `--no-sandbox`, `seccomp=unconfined`, and committed WireGuard-looking private keys;
+- checks that the documented/default Xpra management binding matches the intended trusted-LAN model.
 
 The integration test is intentionally run only on trusted self-hosted branches/PRs from the same repository; public fork PR code is not executed automatically on the persistent runner.
