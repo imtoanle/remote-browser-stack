@@ -37,22 +37,23 @@ for syscall in clone3 openat2 pidfd_open; do
   }
 done
 
-# Moby intentionally gates namespace-changing syscalls behind CAP_SYS_ADMIN.
-# Chromium's user-namespace sandbox needs these three operations while the
-# outer container deliberately drops every capability. Add one narrow allow
-# rule and retain the rest of Moby's current default profile unchanged.
+# Moby gates namespace-changing operations behind CAP_SYS_ADMIN and chroot
+# behind CAP_SYS_CHROOT. Chromium acquires those privileges only inside its own
+# user namespace, while the outer container deliberately has cap_drop: ALL.
+# Allow only the syscalls required to construct Chromium's inner sandbox and
+# retain the rest of Moby's current default profile unchanged.
 jq '
   .syscalls = ([{
-    "names": ["clone", "setns", "unshare"],
+    "names": ["clone", "setns", "unshare", "chroot"],
     "action": "SCMP_ACT_ALLOW",
     "args": [],
-    "comment": "Allow Chromium user-namespace sandbox without CAP_SYS_ADMIN",
+    "comment": "Allow Chromium inner user-namespace/filesystem sandbox with outer capabilities dropped",
     "includes": {},
     "excludes": {}
   }] + .syscalls)
 ' "$tmp" > "$patched"
 
-for syscall in clone setns unshare; do
+for syscall in clone setns unshare chroot; do
   jq -e --arg syscall "$syscall" '
     .syscalls[]
     | select(.action == "SCMP_ACT_ALLOW" and (.includes == {}) and (.excludes == {}))
