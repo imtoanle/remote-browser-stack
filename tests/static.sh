@@ -21,6 +21,7 @@ required=(
   scripts/install-seccomp-profile.sh
   scripts/install-wireguard-server.sh
   scripts/add-wireguard-peer.sh
+  tests/xpra-password.sh
   tests/wireguard-server-static.sh
   tests/add-wireguard-peer-static.sh
   tests/integration/Dockerfile.wireguard-server
@@ -83,6 +84,7 @@ grep -q 'docker-compose-plugin' scripts/bootstrap-debian.sh || fail 'bootstrap m
 grep -Eq '^[[:space:]]+jq[[:space:]]*\\?$' scripts/bootstrap-debian.sh || fail 'bootstrap must install jq for seccomp profile generation'
 ! grep -Eqi 'gnome|kde|xfce|lightdm|gdm' scripts/bootstrap-debian.sh || fail 'bootstrap must remain headless'
 
+bash tests/xpra-password.sh >/dev/null || fail 'Xpra password generation contract failed'
 bash tests/wireguard-server-static.sh >/dev/null || fail 'WireGuard server static contract failed'
 bash tests/add-wireguard-peer-static.sh >/dev/null || fail 'WireGuard peer lifecycle contract failed'
 grep -q 'network_mode: service:vpn' docs/superpowers/specs/2026-08-30-chrome-wireguard-integration-design.md || fail 'design must preserve browser-vpn namespace sharing'
