@@ -14,7 +14,6 @@ rm -f \
 
 exec dbus-run-session -- google-chrome-stable \
   --user-data-dir="$profile_dir" \
-  --disable-setuid-sandbox \
   --no-first-run \
   --no-default-browser-check \
   "${START_URL:-about:blank}"
