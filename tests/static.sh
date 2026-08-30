@@ -20,7 +20,9 @@ required=(
   scripts/bootstrap-debian.sh
   scripts/install-seccomp-profile.sh
   scripts/install-wireguard-server.sh
+  scripts/add-wireguard-peer.sh
   tests/wireguard-server-static.sh
+  tests/add-wireguard-peer-static.sh
   tests/integration/Dockerfile.wireguard-server
   tests/integration/wireguard-killswitch.sh
 )
@@ -78,6 +80,7 @@ grep -Eq '^[[:space:]]+jq[[:space:]]*\\?$' scripts/bootstrap-debian.sh || fail '
 ! grep -Eqi 'gnome|kde|xfce|lightdm|gdm' scripts/bootstrap-debian.sh || fail 'bootstrap must remain headless'
 
 bash tests/wireguard-server-static.sh >/dev/null || fail 'WireGuard server static contract failed'
+bash tests/add-wireguard-peer-static.sh >/dev/null || fail 'WireGuard peer lifecycle contract failed'
 grep -q 'network_mode: service:vpn' docs/superpowers/specs/2026-08-30-chrome-wireguard-integration-design.md || fail 'design must preserve browser-vpn namespace sharing'
 grep -q 'Phase B:' tests/integration/wireguard-killswitch.sh || fail 'kill-switch test must include a tunnel failure phase'
 grep -q 'docker stop.*server' tests/integration/wireguard-killswitch.sh || fail 'kill-switch test must stop the WireGuard server'
