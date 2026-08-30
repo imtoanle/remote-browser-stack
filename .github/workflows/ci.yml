@@ -35,18 +35,31 @@ jobs:
 
       - name: Shell syntax
         run: |
-          bash -n tests/static.sh
-          for script in rbs scripts/bootstrap-debian.sh scripts/install-seccomp-profile.sh browser/entrypoint.sh browser/start-browser.sh; do
-            if [[ -f "$script" ]]; then bash -n "$script"; fi
-          done
+          scripts=(
+            tests/static.sh
+            tests/wireguard-server-static.sh
+            tests/integration/wireguard-killswitch.sh
+            rbs
+            scripts/bootstrap-debian.sh
+            scripts/install-seccomp-profile.sh
+            scripts/install-wireguard-server.sh
+            browser/entrypoint.sh
+            browser/start-browser.sh
+          )
+          for script in "${scripts[@]}"; do bash -n "$script"; done
 
       - name: ShellCheck
         run: |
-          files=(tests/static.sh)
-          for script in rbs scripts/bootstrap-debian.sh scripts/install-seccomp-profile.sh browser/entrypoint.sh browser/start-browser.sh; do
-            if [[ -f "$script" ]]; then files+=("$script"); fi
-          done
-          shellcheck "${files[@]}"
+          shellcheck \
+            tests/static.sh \
+            tests/wireguard-server-static.sh \
+            tests/integration/wireguard-killswitch.sh \
+            rbs \
+            scripts/bootstrap-debian.sh \
+            scripts/install-seccomp-profile.sh \
+            scripts/install-wireguard-server.sh \
+            browser/entrypoint.sh \
+            browser/start-browser.sh
 
       - name: Static security contract
         run: bash tests/static.sh
@@ -144,3 +157,20 @@ jobs:
           docker logs rbs-browser-smoke
           echo 'Google Chrome Stable did not start within the smoke-test window' >&2
           exit 1
+
+  network-integration:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Verify network test prerequisites
+        run: |
+          set -euo pipefail
+          command -v docker >/dev/null || { echo 'docker is required on the self-hosted runner' >&2; exit 1; }
+          docker info >/dev/null
+          [[ -c /dev/net/tun ]] || { echo '/dev/net/tun is required on the self-hosted runner' >&2; exit 1; }
+
+      - name: Verify Gluetun WireGuard kill switch
+        run: bash tests/integration/wireguard-killswitch.sh
