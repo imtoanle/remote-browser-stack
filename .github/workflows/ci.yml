@@ -12,7 +12,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install ShellCheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
@@ -44,7 +44,54 @@ jobs:
 
   build-browser:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
       - name: Build browser image
-        run: docker build --pull browser
+        run: docker build --pull -t remote-browser-stack:ci browser
+
+      - name: Smoke test Xpra and Chromium startup
+        run: |
+          password_file="$(mktemp)"
+          printf '%s' 'ci-only-password' > "$password_file"
+          chmod 0600 "$password_file"
+
+          cleanup() {
+            docker rm -f rbs-browser-smoke >/dev/null 2>&1 || true
+            rm -f "$password_file"
+          }
+          trap cleanup EXIT
+
+          docker run -d \
+            --name rbs-browser-smoke \
+            --network none \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --shm-size 1g \
+            -e START_URL=about:blank \
+            -v "$password_file:/run/secrets/xpra_password:ro" \
+            remote-browser-stack:ci
+
+          for _ in {1..20}; do
+            if [[ "$(docker inspect -f '{{.State.Running}}' rbs-browser-smoke)" != "true" ]]; then
+              docker logs rbs-browser-smoke
+              exit 1
+            fi
+
+            if docker exec rbs-browser-smoke bash -c '
+              for file in /proc/[0-9]*/comm; do
+                read -r name < "$file" || continue
+                [[ "$name" == chromium* ]] && exit 0
+              done
+              exit 1
+            '; then
+              exit 0
+            fi
+
+            sleep 1
+          done
+
+          docker logs rbs-browser-smoke
+          echo 'Chromium did not start within the smoke-test window' >&2
+          exit 1
