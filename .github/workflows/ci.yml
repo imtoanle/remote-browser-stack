@@ -4,18 +4,31 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# This repository is public. Never execute fork-controlled pull-request code on
+# a persistent self-hosted runner. Fork PRs are intentionally skipped; a
+# maintainer can review the patch and test it from a trusted branch instead.
+
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux]
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install ShellCheck
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Verify runner prerequisites
+        run: |
+          set -euo pipefail
+          command -v docker >/dev/null || { echo 'docker is required on the self-hosted runner' >&2; exit 1; }
+          docker compose version >/dev/null || { echo 'docker compose plugin is required on the self-hosted runner' >&2; exit 1; }
+          if ! command -v shellcheck >/dev/null; then
+            echo 'shellcheck is required on the self-hosted runner' >&2
+            exit 1
+          fi
 
       - name: Shell syntax
         run: |
@@ -43,10 +56,16 @@ jobs:
           docker compose --env-file .env.account.example config >/dev/null
 
   build-browser:
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, linux]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
+
+      - name: Verify runner prerequisites
+        run: |
+          set -euo pipefail
+          command -v docker >/dev/null || { echo 'docker is required on the self-hosted runner' >&2; exit 1; }
 
       - name: Build browser image
         run: docker build --pull -t remote-browser-stack:ci browser
