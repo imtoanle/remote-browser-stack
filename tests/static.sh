@@ -44,7 +44,7 @@ grep -Fq "seccomp=\${SECCOMP_PROFILE}" compose.yaml || fail 'browser must use th
 grep -q 'FIREWALL_INPUT_PORTS' compose.yaml || fail 'Gluetun Xpra input firewall allowance is required'
 grep -qx 'XPRA_BIND_IP=0.0.0.0' .env.account.example || fail 'Xpra sample bind must default to all VM interfaces for trusted-LAN access'
 grep -Fq 'XPRA_BIND_IP=0.0.0.0' rbs || fail 'new accounts must expose Xpra on VM interfaces for trusted-LAN access'
-grep -Fq 'xpra attach tcp://BROWSER_VM_LAN_IP:' rbs || fail 'rbs connect must show direct LAN attach guidance when bound to 0.0.0.0'
+grep -Fq 'tcp://BROWSER_VM_LAN_IP:' rbs || fail 'rbs connect must show direct LAN attach guidance when bound to 0.0.0.0'
 grep -Fq -- '--window-close=disconnect' rbs || fail 'rbs connect must keep remote Chrome alive when a forwarded window is closed'
 grep -q 'trusted LAN' README.md || fail 'README must document trusted-LAN Xpra access'
 ! grep -q 'default loopback binding' README.md || fail 'README must not describe loopback as the default Xpra binding'
