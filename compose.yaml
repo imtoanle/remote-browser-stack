@@ -41,6 +41,7 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+      - "seccomp=${SECCOMP_PROFILE}"
     restart: unless-stopped
 
 secrets:
