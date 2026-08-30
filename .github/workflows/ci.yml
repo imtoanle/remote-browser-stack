@@ -170,7 +170,8 @@ jobs:
                 set -e
                 xorg_pid=""
                 for file in /proc/[0-9]*/cmdline; do
-                  if tr "\0" " " < "$file" 2>/dev/null | grep -q "/usr/lib/xorg/Xorg"; then
+                  argv0="$(tr "\0" "\n" < "$file" 2>/dev/null | head -n1)"
+                  if [[ "$argv0" == "/usr/lib/xorg/Xorg" || "$argv0" == "/usr/bin/Xorg" ]]; then
                     xorg_pid="${file#/proc/}"
                     xorg_pid="${xorg_pid%/cmdline}"
                     break
