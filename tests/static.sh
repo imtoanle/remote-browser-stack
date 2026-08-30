@@ -43,8 +43,8 @@ grep -Eq '^[[:space:]]+xpra-x11[[:space:]]*\\?$' browser/Dockerfile || fail 'xpr
 grep -q '3c28324314729dbade8287e868eef6338c42807a' scripts/install-seccomp-profile.sh \
   || fail 'Chromium seccomp base must be pinned to the reviewed Moby profile commit'
 grep -q 'moby/profiles' scripts/install-seccomp-profile.sh || fail 'seccomp installer must use the current Moby profile as its base'
-for syscall in clone setns unshare; do
-  grep -q "$syscall" scripts/install-seccomp-profile.sh || fail "seccomp installer must allow namespace syscall: $syscall"
+for syscall in clone setns unshare chroot; do
+  grep -q "$syscall" scripts/install-seccomp-profile.sh || fail "seccomp installer must allow Chromium sandbox syscall: $syscall"
 done
 for syscall in clone3 openat2 pidfd_open; do
   grep -q "$syscall" scripts/install-seccomp-profile.sh || fail "seccomp installer must verify modern profile syscall: $syscall"
