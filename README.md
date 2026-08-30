@@ -28,9 +28,9 @@ CI verifies this with a real ephemeral WireGuard server, a Gluetun client, and a
 
 ## Security model
 
-Only the VPN service receives `NET_ADMIN` and `/dev/net/tun`. The browser runs non-root, drops all Linux capabilities, enables `no-new-privileges`, retains Chrome's Linux sandbox, and publishes no ports directly.
+Only the VPN service receives `NET_ADMIN` and `/dev/net/tun`. The browser runs non-root, drops all Linux capabilities, enables `no-new-privileges`, retains Chrome's Linux user-namespace and seccomp sandboxing, and publishes no ports directly.
 
-Chrome is launched with `--disable-setuid-sandbox`, selecting its unprivileged user-namespace sandbox instead of the legacy SUID helper. The project forbids `--no-sandbox`, privileged browser containers, `SYS_ADMIN`, and `seccomp=unconfined` in production runtime paths.
+Chrome is launched without `--no-sandbox` or `--disable-setuid-sandbox`. The project forbids privileged browser containers, `SYS_ADMIN`, and `seccomp=unconfined` in production runtime paths.
 
 Xpra is published by the VPN namespace and, by default, Docker publishes each account's Xpra port on `0.0.0.0` so it can be reached directly from a **trusted LAN**. Xpra password authentication remains required. This plain TCP listener must not be forwarded or exposed to the public Internet/WAN. Operators who need encrypted remote transport can still set `XPRA_BIND_IP=127.0.0.1` and use an SSH tunnel.
 
@@ -149,7 +149,7 @@ sudo ./rbs status account-01
 sudo ./rbs ip account-01
 ```
 
-The first start builds a Debian 13 image containing Google Chrome Stable and Xpra.
+The first start builds a Debian 13 image containing Google Chrome Stable and Xpra. Xpra uses the Xorg dummy driver rather than Xvfb so the virtual display can maintain correct hardware DPI during client resize; CI verifies the display reports 96x96 DPI.
 
 ## 5. Connect with Xpra from the LAN
 
