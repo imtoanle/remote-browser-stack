@@ -29,8 +29,7 @@ grep -q 'octet > 255' "$script" || fail 'installer must reject IPv4 octets above
 grep -q 'rbs-server.env' "$script" || fail 'installer must persist endpoint/interface metadata for later peer creation'
 grep -q 'RBS_ENDPOINT=' "$script" || fail 'persisted server metadata must include the public endpoint'
 ! grep -q 'flush ruleset' "$script" || fail 'installer must not flush unrelated nftables rules'
-# shellcheck disable=SC2016
-! grep -Fq '[[ "${EUID}" -eq 0 ]] || { printf '\''Run as root.' "$script" || fail 'local wrapper must not require root'
+! grep -Fq "printf 'Run as root." "$script" || fail 'local wrapper must not require root'
 grep -q -- '--client-address)' "$script" || fail 'explicit client address override must remain supported'
 grep -q 'CLIENT_ADDRESS=""' "$script" || fail 'client address must default to automatic allocation'
 grep -q 'OUTPUT=""' "$script" || fail 'local output path must be optional'
