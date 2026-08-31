@@ -159,7 +159,9 @@ remote_install() {
   [[ -n "$CLIENT_NAME" ]] || fail '--client-name is required'
   [[ "$WG_IF" =~ ^[A-Za-z0-9_.-]+$ && ${#WG_IF} -le 15 ]] || fail 'Invalid WireGuard interface name.'
   [[ "$CLIENT_NAME" =~ ^[A-Za-z0-9_.-]+$ ]] || fail 'Invalid client name.'
-  [[ "$LISTEN_PORT" =~ ^[0-9]+$ ]] && (( LISTEN_PORT >= 1 && LISTEN_PORT <= 65535 )) || fail 'Invalid listen port.'
+  if [[ ! "$LISTEN_PORT" =~ ^[0-9]+$ ]] || (( LISTEN_PORT < 1 || LISTEN_PORT > 65535 )); then
+    fail 'Invalid listen port.'
+  fi
   validate_ipv4_cidr "$SERVER_ADDRESS" || fail "Invalid IPv4 --server-address: $SERVER_ADDRESS"
   [[ -z "$CLIENT_ADDRESS" ]] || validate_ipv4_cidr "$CLIENT_ADDRESS" || fail "Invalid IPv4 --client-address: $CLIENT_ADDRESS"
 
