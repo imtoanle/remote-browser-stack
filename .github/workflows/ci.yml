@@ -40,6 +40,7 @@ jobs:
             tests/xpra-password.sh
             tests/chrome-profile-lock.sh
             tests/wireguard-server-static.sh
+            tests/wireguard-address-allocation.sh
             tests/add-wireguard-peer-static.sh
             tests/integration/wireguard-killswitch.sh
             rbs
@@ -59,6 +60,7 @@ jobs:
             tests/xpra-password.sh \
             tests/chrome-profile-lock.sh \
             tests/wireguard-server-static.sh \
+            tests/wireguard-address-allocation.sh \
             tests/add-wireguard-peer-static.sh \
             tests/integration/wireguard-killswitch.sh \
             rbs \

@@ -93,49 +93,80 @@ AllowedIPs = 0.0.0.0/0
 
 `./rbs up` rejects committed placeholders and a configuration without the IPv4 default route.
 
-### Option B: provision an external WireGuard server
+### Option B: provision an external WireGuard server from your workstation
 
-On the external Debian/Ubuntu server, bootstrap the server and create the first peer:
+Run the installer **locally** and point it at the external Debian/Ubuntu server over SSH. The remote host does not need this repository cloned:
 
 ```bash
-sudo ./scripts/install-wireguard-server.sh \
+./scripts/install-wireguard-server.sh root@203.0.113.10 \
+  --client-name account-01 \
+  --output ./account-01.conf
+```
+
+By default:
+
+- the SSH host (`203.0.113.10` above) is also used as the public WireGuard endpoint;
+- the first unused client address is allocated automatically from the WireGuard subnet (`10.77.0.2/32`, then `.3/32`, and so on);
+- re-running the same `--client-name` keeps its existing key and tunnel address;
+- `--output` is a **local path** and is written mode `0600`;
+- the generated client configuration is also printed to stdout at the end.
+
+If the public endpoint differs from the SSH host, override it explicitly:
+
+```bash
+./scripts/install-wireguard-server.sh root@10.0.0.5 \
   --endpoint vpn.example.com \
   --client-name account-01 \
-  --client-address 10.77.0.2/32 \
-  --output /root/account-01.conf
+  --output ./account-01.conf
 ```
+
+You can still request a specific tunnel address when needed:
+
+```bash
+./scripts/install-wireguard-server.sh root@203.0.113.10 \
+  --client-name account-01 \
+  --client-address 10.77.0.20/32 \
+  --output ./account-01.conf
+```
+
+Explicit addresses must be usable `/32` addresses inside the configured server subnet and are rejected if another client already owns the same IP.
 
 The installer:
 
-- installs `wireguard-tools` and `nftables`;
-- generates and persists the server key and first client key under `/etc/wireguard/rbs-keys`;
-- persists server endpoint/interface metadata in `/etc/wireguard/rbs-server.env` for later peer operations;
-- self-heals missing public-key files from their private keys;
+- streams itself over SSH instead of requiring a repository checkout on the external server;
+- installs `wireguard-tools`, `nftables`, and required system utilities remotely;
+- generates and persists server/client key material under `/etc/wireguard/rbs-keys`;
+- persists endpoint/interface metadata in `/etc/wireguard/rbs-server.env`;
+- automatically allocates a non-conflicting client `/32` from persisted peer state;
+- serializes peer allocation/config rebuilds with a remote `flock`, so concurrent provisioning calls cannot claim the same address or overwrite each other's peer list;
 - enables persistent IPv4 forwarding;
 - manages only the dedicated nftables table `inet rbs_wg`;
 - enables `wg-quick@wg0` and nftables;
 - emits a Gluetun-compatible full-tunnel client config.
 
-Copy `/root/account-01.conf` securely to the browser VM as:
-
-```text
-state/accounts/account-01/wireguard.conf
-```
-
-### Add another peer on the same exit server
-
-For each additional browser profile that should use the same external WireGuard server/public IP, create a **new WireGuard peer with its own key and tunnel address**:
+Copy the resulting local config into the matching browser account:
 
 ```bash
-sudo ./scripts/add-wireguard-peer.sh \
-  --client-name account-02 \
-  --client-address 10.77.0.3/32 \
-  --output /root/account-02.conf
+cp ./account-01.conf state/accounts/account-01/wireguard.conf
 ```
 
-Then copy `/root/account-02.conf` to the matching browser account as its `wireguard.conf`.
+### Provision another peer on the same exit server
 
-`add-wireguard-peer.sh` reuses the existing server private key and persisted endpoint metadata. It generates a dedicated client key only if that peer does not already exist, rejects an address already assigned to another peer, rebuilds the server peer list deterministically, and applies the new peer to the running interface. Re-running the same client name is idempotent and preserves that client's private key; changing its address updates the peer rather than creating a duplicate.
+For additional browser profiles, run the same local installer again with a new client name. A new WireGuard key and the next unused tunnel address are assigned automatically:
+
+```bash
+./scripts/install-wireguard-server.sh root@203.0.113.10 \
+  --client-name account-02 \
+  --output ./account-02.conf
+```
+
+Then install it into the matching browser account:
+
+```bash
+cp ./account-02.conf state/accounts/account-02/wireguard.conf
+```
+
+The lower-level `scripts/add-wireguard-peer.sh` remains available for operators already logged into the exit server, but the local `install-wireguard-server.sh` workflow is the recommended path for both the first peer and subsequent peers.
 
 Do **not** copy the exact same WireGuard client config/private key into multiple Gluetun containers. Use one peer per browser profile even when several profiles intentionally share the same external server and public exit IP.
 
@@ -255,6 +286,7 @@ sudo ./rbs up account-01
 │   ├── add-wireguard-peer-static.sh
 │   ├── client-config.sh
 │   ├── static.sh
+│   ├── wireguard-address-allocation.sh
 │   └── wireguard-server-static.sh
 ├── compose.yaml
 └── rbs
