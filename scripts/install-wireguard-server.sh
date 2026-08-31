@@ -194,8 +194,6 @@ remote_install() {
     validate_ipv4_cidr "$CLIENT_ADDRESS" || { printf 'Invalid IPv4 --client-address: %s\n' "$CLIENT_ADDRESS" >&2; exit 2; }
   fi
 
-  # Preserve stdout exclusively for the generated client configuration. All
-  # provisioning progress from apt/systemd/etc. is sent to stderr instead.
   exec 3>&1
   exec 1>&2
 
@@ -415,12 +413,10 @@ local_main() {
   cat "$tmp_config"
 }
 
-if [[ "${RBS_WG_TEST_LIB:-0}" == "1" ]]; then
-  return 0 2>/dev/null || exit 0
-fi
-
-if [[ "${RBS_WG_REMOTE_MODE:-0}" == "1" ]]; then
-  remote_install "$@"
-else
-  local_main "$@"
+if [[ "${RBS_WG_TEST_LIB:-0}" != "1" ]]; then
+  if [[ "${RBS_WG_REMOTE_MODE:-0}" == "1" ]]; then
+    remote_install "$@"
+  else
+    local_main "$@"
+  fi
 fi
