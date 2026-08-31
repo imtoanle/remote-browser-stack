@@ -61,6 +61,7 @@ grep -Eq '^[[:space:]]+google-chrome-stable[[:space:]]*\\?$' browser/Dockerfile 
 ! grep -Eq '^[[:space:]]+chromium[[:space:]]*\\?$' browser/Dockerfile || fail 'Debian Chromium package must not be the default browser'
 grep -q 'google-chrome-stable' browser/start-browser.sh || fail 'browser launcher must execute Google Chrome Stable'
 grep -q -- '--restore-last-session' browser/start-browser.sh || fail 'Chrome must restore the previous tab session after a browser/container restart'
+grep -q -- '--disable-pinch' browser/start-browser.sh || fail 'Chrome must disable pinch/scroll gesture zoom in the remote session'
 ! grep -Fq 'about:blank' browser/start-browser.sh || fail 'Chrome launcher must not force a blank startup tab when START_URL is unset'
 grep -Fq "START_URL: \"\${START_URL:-}\"" compose.yaml || fail 'Compose must leave START_URL empty by default so session restore does not add a blank tab'
 grep -qx 'START_URL=' .env.account.example || fail 'sample account must leave START_URL empty by default'
