@@ -11,6 +11,8 @@ grep -q 'ssh' "$script" || fail 'installer must orchestrate provisioning over SS
 grep -q 'RBS_WG_REMOTE_MODE' "$script" || fail 'installer must stream itself into a dedicated remote execution mode'
 grep -q 'RBS_WG_TEST_LIB' "$script" || fail 'installer must expose address allocation helpers for behavior tests'
 grep -q '^select_client_address()' "$script" || fail 'installer must auto-select non-conflicting client addresses'
+grep -q 'rbs-peer-allocation.lock' "$script" || fail 'remote peer allocation must use a persistent lock file'
+grep -q 'flock -x' "$script" || fail 'remote peer allocation must serialize concurrent provisioning'
 grep -q '/etc/os-release' "$script" || fail 'remote installer must detect host OS'
 grep -q 'wireguard-tools' "$script" || fail 'remote installer must install wireguard-tools'
 grep -q 'nftables' "$script" || fail 'remote installer must install nftables'
