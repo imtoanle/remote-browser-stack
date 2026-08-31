@@ -17,6 +17,7 @@ chrome_args=(
   --no-first-run
   --no-default-browser-check
   --restore-last-session
+  --disable-pinch
 )
 
 if [[ -n "${START_URL:-}" ]]; then
