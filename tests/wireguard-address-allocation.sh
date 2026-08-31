@@ -15,7 +15,7 @@ cleanup() {
 trap cleanup EXIT
 
 export RBS_WG_TEST_LIB=1
-# shellcheck source=../scripts/install-wireguard-server.sh
+# shellcheck disable=SC1091
 source ./scripts/install-wireguard-server.sh
 
 key_dir="$state_dir/rbs-keys"
